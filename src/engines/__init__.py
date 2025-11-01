@@ -6,4 +6,7 @@ Motores para funcionalidades específicas:
 - normativa_loader: Carga y gestión de documentos normativos
 """
 
+from .embedding_engine import EmbeddingEngine, EmbeddingEngineError
+
 __version__ = '5.0.0'
+__all__ = ['EmbeddingEngine', 'EmbeddingEngineError']

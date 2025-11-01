@@ -82,20 +82,65 @@ cp .env.example .env
 
 ### Uso Básico
 
-```python
-from src.pipeline import APFPipeline
-from src.providers import OpenAIProvider
+**Opción 1: Usando el script de ejemplo**
 
-# Inicializar pipeline con providers
-pipeline = APFPipeline(
-    llm_provider=OpenAIProvider(api_key="tu-key"),
+```bash
+# Configurar API key
+export OPENAI_API_KEY='tu-api-key'
+
+# Ejecutar extracción
+python scripts/run_extraction.py data/examples/puesto_ejemplo.pdf intelligent
+```
+
+**Opción 2: Programáticamente (Simple)**
+
+```python
+from src.pipeline import PipelineFactory
+from src.core import ExtractionMode
+
+# Crear pipeline simple (usa variable de entorno OPENAI_API_KEY)
+extractor = PipelineFactory.create_simple_pipeline()
+
+# Extraer información de un archivo
+result = extractor.extract_from_file(
+    "data/examples/puesto_ejemplo.pdf",
+    mode=ExtractionMode.INTELLIGENT
 )
 
-# Procesar un puesto
-result = pipeline.process_file("data/examples/puesto_sabg.txt")
+# Acceder a los datos
+if result['status'] == 'success':
+    data = result['data']
+    print(f"Puesto: {data['identificacion_puesto']['denominacion_puesto']}")
+    print(f"Funciones: {len(data['funciones'])}")
+```
 
-print(f"Resultado: {result.overall_status}")
-print(f"Score: {result.evaluation_score}")
+**Opción 3: Programáticamente (Avanzado con DI)**
+
+```python
+from src.providers import OpenAIProvider
+from src.core import APFExtractor, FileReader, PromptBuilder, DataValidator
+
+# Crear dependencias manualmente (control total)
+llm_provider = OpenAIProvider(
+    api_key="tu-api-key",
+    default_model="openai/gpt-4o",
+    timeout=60
+)
+
+file_reader = FileReader(encoding='utf-8')
+prompt_builder = PromptBuilder()
+data_validator = DataValidator(strict_mode=False)
+
+# Inyectar dependencias
+extractor = APFExtractor(
+    llm_provider=llm_provider,
+    file_reader=file_reader,
+    prompt_builder=prompt_builder,
+    data_validator=data_validator
+)
+
+# Usar extractor
+result = extractor.extract_from_file("puesto.pdf")
 ```
 
 ## 📚 Documentación

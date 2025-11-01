@@ -10,4 +10,7 @@ Orquesta la ejecución de todas las etapas:
 Utiliza Dependency Injection para máxima flexibilidad y testabilidad.
 """
 
+from .pipeline_factory import PipelineFactory
+
 __version__ = '5.0.0'
+__all__ = ['PipelineFactory']
