@@ -12,4 +12,7 @@ Providers disponibles:
 - file_logger: Logger basado en archivos
 """
 
+from .openai_provider import OpenAIProvider
+
 __version__ = '5.0.0'
+__all__ = ['OpenAIProvider']

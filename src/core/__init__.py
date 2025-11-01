@@ -14,4 +14,7 @@ Contiene la lógica de negocio principal:
 Todos los módulos siguen el principio de Single Responsibility.
 """
 
+from .file_reader import FileReader, FileContent, FileReadError, UnsupportedFileTypeError
+
 __version__ = '5.0.0'
+__all__ = ['FileReader', 'FileContent', 'FileReadError', 'UnsupportedFileTypeError']
