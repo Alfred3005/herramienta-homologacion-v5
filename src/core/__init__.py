@@ -15,6 +15,19 @@ Todos los módulos siguen el principio de Single Responsibility.
 """
 
 from .file_reader import FileReader, FileContent, FileReadError, UnsupportedFileTypeError
+from .prompt_builder import PromptBuilder, ExtractionMode
+from .data_validator import (
+    DataValidator,
+    ValidationResult,
+    ValidationIssue,
+    ValidationSeverity
+)
+from .agente_extractor import APFExtractor, ExtractionError
 
 __version__ = '5.0.0'
-__all__ = ['FileReader', 'FileContent', 'FileReadError', 'UnsupportedFileTypeError']
+__all__ = [
+    'FileReader', 'FileContent', 'FileReadError', 'UnsupportedFileTypeError',
+    'PromptBuilder', 'ExtractionMode',
+    'DataValidator', 'ValidationResult', 'ValidationIssue', 'ValidationSeverity',
+    'APFExtractor', 'ExtractionError'
+]
