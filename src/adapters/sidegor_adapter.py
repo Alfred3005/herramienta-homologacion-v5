@@ -313,10 +313,36 @@ class SidegorAdapter:
 
         registro = datos_hojas['PUESTOS'][0]
 
-        # Extraer nivel salarial
-        grado = registro.get('GRADO')
+        # Extraer nivel salarial (GRUPO + GRADO + NIVEL)
+        # En Sidegor el nivel viene en 3 columnas separadas que deben concatenarse
+        # Ejemplo: GRUPO=O, GRADO=2, NIVEL=1 → O21
+        grupo = registro.get('GRUPO', '')
+        grado = registro.get('GRADO', '')
+        nivel = registro.get('NIVEL', '')
+
+        # Construir código de nivel salarial
+        codigo_nivel = None
+        if grupo or grado or nivel:
+            # Convertir a strings y limpiar
+            grupo_str = str(grupo) if grupo is not None and pd.notna(grupo) else ''
+            grado_str = str(grado) if grado is not None and pd.notna(grado) else ''
+            nivel_str = str(nivel) if nivel is not None and pd.notna(nivel) else ''
+
+            # Remover ".0" de floats (ej: "2.0" -> "2")
+            if grado_str.endswith('.0'):
+                grado_str = grado_str[:-2]
+            if nivel_str.endswith('.0'):
+                nivel_str = nivel_str[:-2]
+
+            # Concatenar
+            codigo_nivel = f"{grupo_str}{grado_str}{nivel_str}"
+
+            # Si quedó vacío, poner None
+            if not codigo_nivel or codigo_nivel == '':
+                codigo_nivel = None
+
         nivel_salarial = {
-            "codigo": str(grado) if grado is not None else None,
+            "codigo": codigo_nivel,
             "descripcion": None
         }
 
