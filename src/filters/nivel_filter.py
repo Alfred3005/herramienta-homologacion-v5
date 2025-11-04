@@ -30,13 +30,25 @@ class NivelSalarialFilter:
         """
         Verifica si el puesto tiene uno de los niveles especificados.
 
+        Detecta automáticamente si debe buscar en GRUPO (letras) o GRADO (números).
+        - Si niveles son letras (G, H, I, J, K, etc.) → busca en GRUPO
+        - Si niveles son números (1, 2, 3, etc.) → busca en GRADO
+
         Args:
             puesto_data: Datos del puesto
 
         Returns:
             True si el nivel del puesto está en la lista de niveles
         """
-        nivel = puesto_data.get('GRADO', '')
+        # Detectar si estamos filtrando por GRUPO (letras) o GRADO (números)
+        es_grupo = any(nivel.isalpha() for nivel in self.niveles if len(nivel) == 1)
+
+        if es_grupo:
+            # Filtrar por GRUPO (G, H, I, J, K, M, N, O, P)
+            nivel = puesto_data.get('GRUPO', '')
+        else:
+            # Filtrar por GRADO (1, 2, 3, etc.)
+            nivel = puesto_data.get('GRADO', '')
 
         # Manejar None y NaN
         if nivel is None or (isinstance(nivel, float) and math.isnan(nivel)):
