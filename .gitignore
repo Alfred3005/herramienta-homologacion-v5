@@ -66,3 +66,11 @@ docs/_build/
 data/resultados/
 data/reportes/
 *.json.bak
+
+# Output from batch processing
+output/
+*_result.json
+test_*.py
+test_*.json
+prueba_*.json
+puesto_*_test.txt
