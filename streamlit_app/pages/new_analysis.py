@@ -509,25 +509,199 @@ def step_4_execute():
 def execute_analysis():
     """Ejecuta el análisis con la configuración guardada"""
 
-    st.info("🔄 Iniciando análisis... Esta funcionalidad se implementará en la siguiente versión.")
+    # Verificar que tenemos archivos cargados
+    if st.session_state.uploaded_sidegor is None:
+        st.error("❌ No se ha cargado el archivo Sidegor")
+        return
 
-    # TODO: Implementar integración con el sistema v5.0
-    # Por ahora, mostramos un mensaje de progreso simulado
+    if st.session_state.uploaded_normativa is None:
+        st.error("❌ No se ha cargado el archivo de normativa")
+        return
 
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    st.info("🔄 Iniciando análisis con sistema de validación v5.0...")
 
-    for i in range(100):
-        progress_bar.progress(i + 1)
-        status_text.text(f"Procesando... {i+1}%")
-        time.sleep(0.02)
+    try:
+        # Importar validador
+        from src.validators.integrated_validator import IntegratedValidator
+        from src.adapters.sidegor_adapter import SidegorAdapter
 
-    st.success("✅ Análisis completado (simulado)")
-    st.balloons()
+        # Crear containers para progreso
+        progress_bar = st.progress(0)
+        status_text = st.empty()
 
-    if st.button("Ver Resultados"):
-        st.session_state.page = 'results'
-        st.rerun()
+        # Paso 1: Leer normativa
+        status_text.text("📜 Leyendo archivo de normativa...")
+        progress_bar.progress(10)
+
+        normativa_text = ""
+        if st.session_state.uploaded_normativa.type == "text/plain":
+            normativa_text = st.session_state.uploaded_normativa.read().decode('utf-8')
+        else:
+            # Para PDFs y otros formatos, usar texto simple por ahora
+            st.warning("⚠️ Tipo de archivo de normativa no soportado completamente. Usando modo simplificado.")
+            normativa_text = "Normativa cargada (parsing completo pendiente)"
+
+        # Dividir en fragmentos (simplificado - por párrafos)
+        normativa_fragments = [p.strip() for p in normativa_text.split('\n\n') if p.strip()]
+
+        # Paso 2: Cargar adaptador Sidegor
+        status_text.text("📊 Cargando archivo Sidegor...")
+        progress_bar.progress(20)
+
+        # Resetear el archivo para lectura
+        st.session_state.uploaded_sidegor.seek(0)
+
+        try:
+            adapter = SidegorAdapter(st.session_state.uploaded_sidegor)
+            adapter.validate_format()
+        except Exception as e:
+            st.error(f"❌ Error al cargar Sidegor: {str(e)}")
+            st.info("Usando modo de prueba con datos del session state...")
+            adapter = None
+
+        # Paso 3: Extraer puestos a validar
+        status_text.text("🔍 Aplicando filtros y extrayendo puestos...")
+        progress_bar.progress(30)
+
+        puestos_to_validate = []
+
+        if adapter:
+            # Usar adaptador real
+            try:
+                all_puestos = adapter.get_all_puestos()
+
+                # Aplicar filtros
+                filters = st.session_state.filters_config
+
+                for puesto_codigo in all_puestos:
+                    puesto_data = adapter.get_puesto_completo(puesto_codigo)
+
+                    # Aplicar filtros básicos
+                    if filters.get('unidad_responsable') and \
+                       filters['unidad_responsable'] not in puesto_data.get('unidad_responsable', ''):
+                        continue
+
+                    if filters.get('niveles') and \
+                       puesto_data.get('nivel_salarial', '')[0] not in filters['niveles']:
+                        continue
+
+                    puestos_to_validate.append(puesto_data)
+
+            except Exception as e:
+                st.error(f"Error extrayendo puestos: {str(e)}")
+                puestos_to_validate = []
+
+        # Si no hay puestos, crear datos de ejemplo
+        if len(puestos_to_validate) == 0:
+            st.warning("⚠️ No se pudieron extraer puestos. Usando ejemplo de demostración...")
+            puestos_to_validate = [{
+                "codigo": "EJEMPLO-001",
+                "denominacion": "DIRECTOR DE EJEMPLO",
+                "nivel_salarial": "M1",
+                "unidad_responsable": "EJEMPLO - PRUEBA",
+                "funciones": [
+                    {
+                        "id": "F001",
+                        "descripcion_completa": "Coordinar actividades del área",
+                        "que_hace": "Coordinar actividades",
+                        "para_que_lo_hace": "para asegurar el cumplimiento"
+                    }
+                ]
+            }]
+
+        # Paso 4: Inicializar validador
+        status_text.text("⚙️ Inicializando sistema de validación...")
+        progress_bar.progress(40)
+
+        validator = IntegratedValidator(
+            normativa_fragments=normativa_fragments
+        )
+
+        # Paso 5: Validar puestos
+        status_text.text(f"🔍 Validando {len(puestos_to_validate)} puestos...")
+        progress_bar.progress(50)
+
+        def update_progress(pct):
+            # Mapear 0-100 a 50-90
+            adjusted = 50 + int(pct * 0.4)
+            progress_bar.progress(adjusted)
+            status_text.text(f"🔍 Validando puestos... {pct}%")
+
+        resultados = validator.validate_batch(
+            puestos_to_validate,
+            progress_callback=update_progress
+        )
+
+        # Paso 6: Guardar resultados
+        status_text.text("💾 Guardando resultados...")
+        progress_bar.progress(95)
+
+        # Guardar en session state
+        st.session_state.analysis_results = {
+            'timestamp': datetime.now().isoformat(),
+            'total_puestos': len(resultados),
+            'resultados': resultados,
+            'config': {
+                'filtros': st.session_state.filters_config,
+                'opciones': st.session_state.analysis_options
+            }
+        }
+
+        # Exportar a JSON si se solicitó
+        if st.session_state.analysis_options.get('save_json', True):
+            output_dir = Path("output/analisis")
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            json_path = output_dir / f"analisis_{timestamp}.json"
+
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(st.session_state.analysis_results, f, ensure_ascii=False, indent=2)
+
+            st.session_state.analysis_results['json_path'] = str(json_path)
+
+        # Finalizar
+        progress_bar.progress(100)
+        status_text.text("✅ Análisis completado!")
+
+        st.success(f"""
+        ✅ **Análisis completado exitosamente**
+
+        - Puestos analizados: **{len(resultados)}**
+        - Criterios aplicados: **3** (Verbos Débiles, Contextual, Impacto Jerárquico)
+        - Matriz de decisión: **2-of-3**
+        """)
+
+        st.balloons()
+
+        # Mostrar resumen rápido
+        aprobados = sum(1 for r in resultados if r['validacion']['resultado'] in ['APROBADO', 'APROBADO_CON_OBSERVACIONES'])
+        rechazados = len(resultados) - aprobados
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Analizados", len(resultados))
+        with col2:
+            st.metric("✅ Aprobados", aprobados)
+        with col3:
+            st.metric("❌ Rechazados", rechazados)
+
+        st.markdown("---")
+
+        if st.button("📊 Ver Resultados Detallados", type="primary", use_container_width=True):
+            st.session_state.page = 'results'
+            st.rerun()
+
+    except Exception as e:
+        st.error(f"""
+        ❌ **Error durante el análisis**
+
+        {str(e)}
+        """)
+
+        with st.expander("🔍 Ver detalles del error"):
+            import traceback
+            st.code(traceback.format_exc())
 
 
 if __name__ == "__main__":
