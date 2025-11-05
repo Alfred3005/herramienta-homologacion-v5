@@ -40,6 +40,7 @@ PUESTO_RECHAZADO = {
         },
         {
             "id": "F002",
+            "descripcion_completa": "Apoyar la elaboración de presupuestos federales",
             "que_hace": "Apoyar la elaboración",  # ← VERBO DÉBIL
             "para_que_lo_hace": "para garantizar recursos a nivel federal"  # ← Alcance muy alto
         },

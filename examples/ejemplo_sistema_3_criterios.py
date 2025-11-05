@@ -61,6 +61,7 @@ PUESTO_EJEMPLO = {
         },
         {
             "id": "F003",
+            "descripcion_completa": "Aprobar la asignación de recursos para proyectos a nivel federal",
             "que_hace": "Aprobar la asignación",
             "para_que_lo_hace": "para garantizar recursos a nivel federal"
         },
