@@ -20,37 +20,45 @@ def show():
     st.markdown("---")
 
     # Métricas principales
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
         st.markdown("""
         <div class="metric-card">
-            <h3>127</h3>
-            <p>🎯 Análisis Totales</p>
+            <h3>1,847</h3>
+            <p>🎯 Puestos Totales</p>
         </div>
         """, unsafe_allow_html=True)
 
     with col2:
         st.markdown("""
-        <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-            <h3>3</h3>
-            <p>⏱️ En Proceso</p>
+        <div class="metric-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+            <h3>1,652</h3>
+            <p>✅ Aceptados</p>
         </div>
         """, unsafe_allow_html=True)
 
     with col3:
         st.markdown("""
-        <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-            <h3>124</h3>
-            <p>✅ Completados</p>
+        <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <h3>195</h3>
+            <p>❌ Rechazados</p>
         </div>
         """, unsafe_allow_html=True)
 
     with col4:
         st.markdown("""
-        <div class="metric-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
-            <h3>97.3%</h3>
-            <p>📊 Tasa de Éxito</p>
+        <div class="metric-card" style="background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%);">
+            <h3>3</h3>
+            <p>⏱️ En Proceso</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col5:
+        st.markdown("""
+        <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+            <h3>89.4%</h3>
+            <p>📊 Tasa Aprobación</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -86,6 +94,49 @@ def show():
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("---")
+
+    # Gráfica de criterios de fallo
+    st.subheader("🚫 Criterios Más Comunes de Rechazo")
+
+    # Datos de ejemplo de criterios de fallo
+    criterios = [
+        "Verbos débiles sin respaldo",
+        "Desalineación contextual",
+        "Referencias institucionales incorrectas",
+        "Falta de herencia jerárquica",
+        "Funciones genéricas no verificables"
+    ]
+
+    frecuencias = [78, 52, 34, 21, 10]
+
+    # Crear gráfica de barras horizontales
+    fig_criterios = go.Figure()
+    fig_criterios.add_trace(go.Bar(
+        y=criterios,
+        x=frecuencias,
+        orientation='h',
+        marker=dict(
+            color=frecuencias,
+            colorscale='Reds',
+            showscale=False
+        ),
+        text=frecuencias,
+        textposition='outside',
+    ))
+
+    fig_criterios.update_layout(
+        height=350,
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis_title="Número de Rechazos",
+        yaxis_title="",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        yaxis={'categoryorder':'total ascending'}
+    )
+
+    st.plotly_chart(fig_criterios, use_container_width=True)
 
     st.markdown("---")
 
@@ -172,28 +223,7 @@ def show():
                     st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.3;'>", unsafe_allow_html=True)
 
     with col_right:
-        st.subheader("⚡ Acceso Rápido")
-
-        if st.button("🆕 Nuevo Análisis", use_container_width=True, type="primary"):
-            st.session_state.page = 'new_analysis'
-            st.rerun()
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        if st.button("📊 Ver Todos los Resultados", use_container_width=True):
-            st.session_state.page = 'results'
-            st.rerun()
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        if st.button("📚 Historial Completo", use_container_width=True):
-            st.session_state.page = 'history'
-            st.rerun()
-
-        st.markdown("---")
-
-        # Estadísticas adicionales
-        st.markdown("### 📊 Estadísticas")
+        st.subheader("📊 Estadísticas")
 
         st.metric(
             label="Funciones Extraídas",

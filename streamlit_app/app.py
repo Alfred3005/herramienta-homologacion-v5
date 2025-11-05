@@ -31,7 +31,7 @@ st.set_page_config(
     }
 )
 
-# CSS personalizado
+# CSS personalizado con soporte para tema oscuro
 st.markdown("""
 <style>
     /* Mejoras visuales */
@@ -78,44 +78,79 @@ st.markdown("""
         padding: 0.5rem 1.5rem;
     }
 
-    /* Alerts mejorados */
-    .success-box {
-        padding: 1rem;
-        border-radius: 8px;
-        background-color: #d4edda;
-        border-left: 4px solid #28a745;
-        margin: 1rem 0;
-    }
-
-    .info-box {
-        padding: 1rem;
-        border-radius: 8px;
-        background-color: #d1ecf1;
-        border-left: 4px solid #17a2b8;
-        margin: 1rem 0;
-    }
-
-    .warning-box {
-        padding: 1rem;
-        border-radius: 8px;
-        background-color: #fff3cd;
-        border-left: 4px solid #ffc107;
-        margin: 1rem 0;
-    }
-
     /* Progress bar mejorado */
     .stProgress > div > div {
         border-radius: 10px;
     }
 
-    /* Sidebar styling */
+    /* Upload zone */
+    .uploadedFile {
+        border-radius: 8px;
+    }
+
+    /* Sidebar styling - Light theme */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%);
     }
 
-    /* Upload zone */
-    .uploadedFile {
-        border-radius: 8px;
+    [data-testid="stSidebar"] * {
+        color: #1f1f1f !important;
+    }
+
+    [data-testid="stSidebar"] h3 {
+        color: #1f1f1f !important;
+    }
+
+    [data-testid="stSidebar"] a {
+        color: #667eea !important;
+    }
+
+    [data-testid="stSidebar"] .st-emotion-cache-16idsys p {
+        color: #666 !important;
+    }
+
+    /* Dark theme overrides */
+    @media (prefers-color-scheme: dark) {
+        [data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #1a1a1a 0%, #0e1117 100%);
+        }
+
+        [data-testid="stSidebar"] * {
+            color: #fafafa !important;
+        }
+
+        [data-testid="stSidebar"] h3 {
+            color: #fafafa !important;
+        }
+
+        [data-testid="stSidebar"] a {
+            color: #8b9eff !important;
+        }
+
+        [data-testid="stSidebar"] .st-emotion-cache-16idsys p {
+            color: #a0a0a0 !important;
+        }
+    }
+
+    /* Forzar estilos cuando Streamlit detecta dark theme */
+    [data-theme="dark"] [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1a1a1a 0%, #0e1117 100%);
+    }
+
+    [data-theme="dark"] [data-testid="stSidebar"] * {
+        color: #fafafa !important;
+    }
+
+    [data-theme="dark"] [data-testid="stSidebar"] h3 {
+        color: #fafafa !important;
+    }
+
+    [data-theme="dark"] [data-testid="stSidebar"] a {
+        color: #8b9eff !important;
+    }
+
+    [data-theme="dark"] [data-testid="stSidebar"] .st-emotion-cache-16idsys p {
+        color: #a0a0a0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -132,32 +167,38 @@ if 'current_analysis' not in st.session_state:
 
 # Sidebar - Navegación principal
 with st.sidebar:
-    st.image("https://via.placeholder.com/200x80/667eea/ffffff?text=APF+Homologación",
-             use_container_width=True)
+    st.markdown("""
+        <div style='text-align: center; padding: 1rem 0;'>
+            <h2 style='color: #667eea; margin: 0;'>🏛️ APF</h2>
+            <p style='opacity: 0.8; font-size: 0.9rem; margin: 0.5rem 0 0 0;'>Sistema de Homologación</p>
+        </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("---")
 
+    # Navegación con radio buttons (mejor UX que múltiples botones)
     st.markdown("### 🧭 Navegación")
 
-    # Botones de navegación
-    if st.button("🏠 Inicio", use_container_width=True,
-                 type="primary" if st.session_state.page == 'home' else "secondary"):
-        st.session_state.page = 'home'
-        st.rerun()
+    page_options = {
+        "🏠 Inicio": "home",
+        "🆕 Nuevo Análisis": "new_analysis",
+        "📊 Resultados": "results",
+        "📚 Historial": "history"
+    }
 
-    if st.button("🆕 Nuevo Análisis", use_container_width=True,
-                 type="primary" if st.session_state.page == 'new_analysis' else "secondary"):
-        st.session_state.page = 'new_analysis'
-        st.rerun()
+    # Encontrar página actual para el radio button
+    current_page_label = [k for k, v in page_options.items() if v == st.session_state.page][0]
 
-    if st.button("📊 Resultados", use_container_width=True,
-                 type="primary" if st.session_state.page == 'results' else "secondary"):
-        st.session_state.page = 'results'
-        st.rerun()
+    selected_page = st.radio(
+        "Selecciona una página:",
+        options=list(page_options.keys()),
+        index=list(page_options.keys()).index(current_page_label),
+        label_visibility="collapsed"
+    )
 
-    if st.button("📚 Historial", use_container_width=True,
-                 type="primary" if st.session_state.page == 'history' else "secondary"):
-        st.session_state.page = 'history'
+    # Cambiar página si selecciona otra
+    if page_options[selected_page] != st.session_state.page:
+        st.session_state.page = page_options[selected_page]
         st.rerun()
 
     st.markdown("---")
@@ -175,20 +216,16 @@ with st.sidebar:
     # Links útiles
     st.markdown("### 🔗 Enlaces")
     st.markdown("""
-    - 📖 [Documentación](https://docs.example.com)
-    - 🐛 [Reportar Bug](https://github.com/repo/issues)
-    - 💬 [Soporte](mailto:soporte@example.com)
+    - [📖 Documentación](https://docs.example.com)
+    - [🐛 Reportar Bug](https://github.com/repo/issues)
+    - [💬 Soporte](mailto:soporte@example.com)
     """)
 
     st.markdown("---")
 
     # Footer
-    st.markdown("""
-    <div style='text-align: center; color: #666; font-size: 0.8rem;'>
-        <p>🏛️ Sistema de Homologación APF</p>
-        <p>© 2025 - Desarrollado con ❤️</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.caption("🏛️ Sistema de Homologación APF")
+    st.caption("© 2025")
 
 # Cargar página correspondiente
 if st.session_state.page == 'home':
