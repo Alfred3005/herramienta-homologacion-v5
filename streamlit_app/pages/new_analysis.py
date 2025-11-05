@@ -548,12 +548,26 @@ def execute_analysis():
         status_text.text("📊 Cargando archivo Sidegor...")
         progress_bar.progress(20)
 
-        # Resetear el archivo para lectura
-        st.session_state.uploaded_sidegor.seek(0)
+        adapter = None
+        temp_file_path = None
 
         try:
-            adapter = SidegorAdapter(st.session_state.uploaded_sidegor)
-            adapter.validate_format()
+            # SidegorAdapter necesita ruta de archivo, no objeto de archivo
+            # Guardar temporalmente el archivo subido
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(mode='wb', suffix='.xlsx', delete=False) as tmp_file:
+                st.session_state.uploaded_sidegor.seek(0)
+                tmp_file.write(st.session_state.uploaded_sidegor.read())
+                temp_file_path = tmp_file.name
+
+            # Crear adaptador e intentar cargar
+            adapter = SidegorAdapter()
+            if adapter.cargar_archivo(temp_file_path):
+                st.success("✅ Archivo Sidegor cargado correctamente")
+            else:
+                st.warning("⚠️ Error al cargar Sidegor con adapter")
+                adapter = None
         except Exception as e:
             st.error(f"❌ Error al cargar Sidegor: {str(e)}")
             st.info("Usando modo de prueba con datos del session state...")
@@ -568,27 +582,67 @@ def execute_analysis():
         if adapter:
             # Usar adaptador real
             try:
-                all_puestos = adapter.get_all_puestos()
+                # Listar todos los códigos de puesto
+                codigos_puestos = adapter.listar_puestos(limite=9999)  # Sin límite
 
                 # Aplicar filtros
                 filters = st.session_state.filters_config
 
-                for puesto_codigo in all_puestos:
-                    puesto_data = adapter.get_puesto_completo(puesto_codigo)
+                status_text.text(f"🔍 Procesando {len(codigos_puestos)} puestos...")
+
+                for idx, codigo_puesto in enumerate(codigos_puestos):
+                    # Actualizar progreso cada 10 puestos
+                    if idx % 10 == 0:
+                        progress_bar.progress(30 + int((idx / len(codigos_puestos)) * 15))
+
+                    # Convertir puesto al formato APF
+                    puesto_data = adapter.convertir_puesto(codigo_puesto)
+
+                    if 'error' in puesto_data:
+                        continue
 
                     # Aplicar filtros básicos
-                    if filters.get('unidad_responsable') and \
-                       filters['unidad_responsable'] not in puesto_data.get('unidad_responsable', ''):
-                        continue
+                    if filters.get('unidad_responsable'):
+                        ur = puesto_data.get('identificacion_puesto', {}).get('unidad_responsable', '')
+                        if filters['unidad_responsable'] not in ur:
+                            continue
 
-                    if filters.get('niveles') and \
-                       puesto_data.get('nivel_salarial', '')[0] not in filters['niveles']:
-                        continue
+                    if filters.get('niveles'):
+                        nivel = puesto_data.get('identificacion_puesto', {}).get('nivel_salarial', '')
+                        if nivel and nivel[0] not in filters['niveles']:
+                            continue
 
-                    puestos_to_validate.append(puesto_data)
+                    # Convertir al formato esperado por el validador
+                    puesto_for_validator = {
+                        "codigo": puesto_data.get('identificacion_puesto', {}).get('codigo', codigo_puesto),
+                        "denominacion": puesto_data.get('identificacion_puesto', {}).get('nombre_puesto', ''),
+                        "nivel_salarial": puesto_data.get('identificacion_puesto', {}).get('nivel_salarial', ''),
+                        "unidad_responsable": puesto_data.get('identificacion_puesto', {}).get('unidad_responsable', ''),
+                        "funciones": []
+                    }
+
+                    # Extraer funciones
+                    funciones_objetivo = puesto_data.get('funciones_y_objetivo', {})
+                    funciones_list = funciones_objetivo.get('funciones', [])
+
+                    for func in funciones_list:
+                        puesto_for_validator["funciones"].append({
+                            "id": func.get('numero', 'FXX'),
+                            "descripcion_completa": func.get('descripcion', ''),
+                            "que_hace": func.get('descripcion', '')[:100],  # Simplificado
+                            "para_que_lo_hace": ""  # No disponible en formato simple
+                        })
+
+                    if len(puesto_for_validator["funciones"]) > 0:
+                        puestos_to_validate.append(puesto_for_validator)
+
+                st.success(f"✅ {len(puestos_to_validate)} puestos listos para validar")
 
             except Exception as e:
                 st.error(f"Error extrayendo puestos: {str(e)}")
+                with st.expander("Ver detalles del error"):
+                    import traceback
+                    st.code(traceback.format_exc())
                 puestos_to_validate = []
 
         # Si no hay puestos, crear datos de ejemplo
@@ -693,6 +747,13 @@ def execute_analysis():
             st.rerun()
 
     except Exception as e:
+        # Limpiar archivo temporal si existe
+        if 'temp_file_path' in locals() and temp_file_path:
+            try:
+                import os
+                os.unlink(temp_file_path)
+            except:
+                pass
         st.error(f"""
         ❌ **Error durante el análisis**
 
