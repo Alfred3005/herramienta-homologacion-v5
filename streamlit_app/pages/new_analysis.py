@@ -604,12 +604,18 @@ def execute_analysis():
                     # Aplicar filtros básicos
                     if filters.get('unidad_responsable'):
                         ur = puesto_data.get('identificacion_puesto', {}).get('unidad_responsable', '')
-                        if filters['unidad_responsable'] not in ur:
+                        if filters['unidad_responsable'] and filters['unidad_responsable'] not in ur:
                             continue
 
                     if filters.get('niveles'):
                         nivel = puesto_data.get('identificacion_puesto', {}).get('nivel_salarial', '')
-                        if nivel and nivel[0] not in filters['niveles']:
+                        if nivel and len(nivel) > 0:
+                            # Extraer primera letra del nivel (G, H, J, K, etc.)
+                            nivel_letra = nivel[0].upper()
+                            if nivel_letra not in filters['niveles']:
+                                continue
+                        else:
+                            # Si no hay nivel, saltar este puesto
                             continue
 
                     # Convertir al formato esperado por el validador
