@@ -820,7 +820,6 @@ def execute_analysis():
         # Limpiar archivo temporal si existe
         if 'temp_file_path' in locals() and temp_file_path:
             try:
-                import os
                 os.unlink(temp_file_path)
             except:
                 pass
