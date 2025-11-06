@@ -663,11 +663,20 @@ def execute_analysis():
                     funciones_list = puesto_data.get('funciones', [])
 
                     for func in funciones_list:
+                        # Manejar campos que pueden ser None
+                        desc_completa = func.get('descripcion_completa') or ''
+                        que_hace = func.get('que_hace')
+                        para_que = func.get('para_que_lo_hace')
+
+                        # Si que_hace es None, usar primeros 100 chars de descripcion_completa
+                        if que_hace is None or not que_hace:
+                            que_hace = desc_completa[:100] if desc_completa else ''
+
                         puesto_for_validator["funciones"].append({
                             "id": func.get('numero', 'FXX'),
-                            "descripcion_completa": func.get('descripcion_completa', ''),
-                            "que_hace": func.get('que_hace', func.get('descripcion_completa', '')[:100]),
-                            "para_que_lo_hace": func.get('para_que_lo_hace', '')
+                            "descripcion_completa": desc_completa,
+                            "que_hace": que_hace,
+                            "para_que_lo_hace": para_que or ''
                         })
 
                     if len(puesto_for_validator["funciones"]) > 0:
