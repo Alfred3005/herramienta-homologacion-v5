@@ -11,6 +11,16 @@ import sys
 root_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(root_dir))
 
+# Leer versión del sistema
+def get_version():
+    """Lee la versión del archivo VERSION"""
+    version_file = root_dir / "VERSION"
+    if version_file.exists():
+        return version_file.read_text().strip()
+    return "5.0"
+
+VERSION = get_version()
+
 # Configuración de página
 st.set_page_config(
     page_title="Sistema de Homologación APF",
@@ -205,8 +215,8 @@ with st.sidebar:
 
     # Información del sistema
     st.markdown("### ℹ️ Sistema")
-    st.markdown("""
-    **Versión**: 5.0
+    st.markdown(f"""
+    **Versión**: {VERSION}
     **Estado**: ✅ Operativo
     **Modelo**: GPT-4o
     """)
@@ -223,9 +233,9 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Footer
+    # Footer sidebar
     st.caption("🏛️ Sistema de Homologación APF")
-    st.caption("© 2025")
+    st.caption(f"v{VERSION} © 2025")
 
 # Cargar página correspondiente
 if st.session_state.page == 'home':
@@ -240,3 +250,12 @@ elif st.session_state.page == 'results':
 elif st.session_state.page == 'history':
     from pages import history
     history.show()
+
+# Footer global en todas las páginas (parte inferior)
+st.markdown("---")
+st.markdown(
+    f"<div style='text-align: center; color: #888; font-size: 0.85rem; padding: 1rem 0;'>"
+    f"Sistema de Homologación APF <strong>v{VERSION}</strong> | Powered by OpenAI GPT-4o"
+    f"</div>",
+    unsafe_allow_html=True
+)
