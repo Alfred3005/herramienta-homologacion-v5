@@ -527,105 +527,151 @@ def extract_hierarchical_level(codigo_puesto: str = None,
         # Si no se puede determinar, retornar UNKNOWN
         return 'UNKNOWN'
 
-def robust_openai_call(prompt: str, 
-                      max_tokens: int = 800, 
+def robust_openai_call(prompt: str,
+                      max_tokens: int = 800,
                       model: str = "openai/gpt-4o",
                       temperature: float = 0.1,
                       context: APFContext = None) -> Dict[str, Any]:
     """
     Llamada robusta a OpenAI con manejo mejorado y logging.
-    Versión unificada con soporte para contexto.
+    ADAPTADO PARA V5: Usa OpenAIProvider en lugar de litellm directamente.
+
+    Mantiene la firma original para compatibilidad con validadores v4.
     """
-    if not LITELLM_AVAILABLE:
-        error_msg = "LiteLLM no disponible - no se pueden hacer llamadas a OpenAI"
+    # Importar OpenAIProvider de v5
+    try:
+        import sys
+        import os
+        # Agregar path raíz del proyecto para imports
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+
+        from src.providers.openai_provider import OpenAIProvider
+        from src.interfaces.llm_provider import LLMRequest, LLMProviderError
+    except ImportError as e:
+        error_msg = f"No se pudo importar OpenAIProvider de v5: {str(e)}"
         if context:
             context.add_error(error_msg)
         return {"status": "error", "error": error_msg}
-    
+
     if context:
         context.start_step("openai_call")
-    
+
     try:
-        if LOGGING_CONFIG["log_openai_calls"]:
-            print(f"[OpenAI] Llamada iniciada - Model: {model}, Max tokens: {max_tokens}")
-        
-        start_time = time.time()
-        
-        response = completion(
+        # Extraer API key del contexto si existe
+        api_key = None
+        if context and hasattr(context, 'data'):
+            api_key = context.data.get('openai_api_key') or context.data.get('api_key')
+
+        # Crear provider de v5
+        provider = OpenAIProvider(
+            api_key=api_key,
+            default_model=model,
+            enable_logging=LOGGING_CONFIG.get("log_openai_calls", True)
+        )
+
+        # Crear request de v5
+        request = LLMRequest(
+            prompt=prompt,
             model=model,
-            messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
             temperature=temperature
         )
-        
-        duration = time.time() - start_time
-        
-        content = response.choices[0].message.content
-        if not content:
-            error_msg = "OpenAI devolvió respuesta vacía"
-            if context:
-                context.fail_step("openai_call", error_msg)
-            return {"status": "error", "error": error_msg}
-        
-        if LOGGING_CONFIG["log_openai_calls"]:
-            print(f"[OpenAI] Respuesta recibida en {duration:.2f}s ({len(content)} chars)")
-        
-        # Limpiar markdown wrapper
-        content_cleaned = content.strip()
-        
-        if content_cleaned.startswith('```json'):
-            content_cleaned = content_cleaned[7:]
-            if content_cleaned.endswith('```'):
-                content_cleaned = content_cleaned[:-3]
-            content_cleaned = content_cleaned.strip()
-        elif content_cleaned.startswith('```'):
-            lines = content_cleaned.split('\n')
-            if len(lines) > 2 and lines[-1].strip() == '```':
-                content_cleaned = '\n'.join(lines[1:-1])
-        
-        # Intentar parsear JSON
+
+        if LOGGING_CONFIG.get("log_openai_calls", True):
+            print(f"[OpenAI] Llamada iniciada - Model: {model}, Max tokens: {max_tokens}")
+
+        start_time = time.time()
+
+        # Llamar a provider usando complete_json para obtener dict directamente
         try:
-            result = json.loads(content_cleaned)
+            result = provider.complete_json(request)
+            duration = time.time() - start_time
+
             if context:
                 context.complete_step("openai_call", f"JSON parseado exitosamente en {duration:.2f}s")
+
+            if LOGGING_CONFIG.get("log_openai_calls", True):
+                print(f"[OpenAI] Respuesta recibida en {duration:.2f}s")
+
             return {
-                "status": "success", 
+                "status": "success",
                 "data": result,
                 "metadata": {
                     "model": model,
-                    "duration": duration,
-                    "tokens_used": max_tokens,  # Aproximado
-                    "content_length": len(content)
+                    "duration": duration
                 }
             }
-            
-        except json.JSONDecodeError as e:
-            # Fallback: buscar JSON con regex
-            json_patterns = [
-                r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',
-                r'\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]'
-            ]
-            
-            for pattern in json_patterns:
-                matches = re.findall(pattern, content_cleaned, re.DOTALL)
-                for match in matches:
-                    try:
-                        result = json.loads(match)
-                        if context:
-                            context.complete_step("openai_call", "JSON extraído con regex")
-                        return {"status": "success", "data": result}
-                    except:
-                        continue
-            
-            error_msg = f"No se pudo parsear JSON: {str(e)}"
-            if context:
-                context.fail_step("openai_call", error_msg)
-            return {
-                "status": "partial", 
-                "raw_content": content_cleaned,
-                "error": error_msg
-            }
-            
+
+        except LLMProviderError as e:
+            # Si complete_json falla, intentar con complete y parsing manual
+            if LOGGING_CONFIG.get("log_openai_calls", True):
+                print(f"[OpenAI] complete_json falló, intentando complete normal...")
+
+            response = provider.complete(request)
+            duration = time.time() - start_time
+            content = response.content
+
+            if not content:
+                error_msg = "OpenAI devolvió respuesta vacía"
+                if context:
+                    context.fail_step("openai_call", error_msg)
+                return {"status": "error", "error": error_msg}
+
+            # Intentar parsear como JSON manualmente
+            content_cleaned = content.strip()
+
+            # Limpiar markdown wrapper
+            if content_cleaned.startswith('```json'):
+                content_cleaned = content_cleaned[7:]
+                if content_cleaned.endswith('```'):
+                    content_cleaned = content_cleaned[:-3]
+                content_cleaned = content_cleaned.strip()
+            elif content_cleaned.startswith('```'):
+                lines = content_cleaned.split('\n')
+                if len(lines) > 2 and lines[-1].strip() == '```':
+                    content_cleaned = '\n'.join(lines[1:-1])
+
+            try:
+                result = json.loads(content_cleaned)
+                if context:
+                    context.complete_step("openai_call", f"JSON parseado manualmente en {duration:.2f}s")
+                return {
+                    "status": "success",
+                    "data": result,
+                    "metadata": {
+                        "model": model,
+                        "duration": duration
+                    }
+                }
+            except json.JSONDecodeError:
+                # Fallback: buscar JSON con regex
+                json_patterns = [
+                    r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',
+                    r'\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]'
+                ]
+
+                for pattern in json_patterns:
+                    matches = re.findall(pattern, content_cleaned, re.DOTALL)
+                    for match in matches:
+                        try:
+                            result = json.loads(match)
+                            if context:
+                                context.complete_step("openai_call", "JSON extraído con regex")
+                            return {"status": "success", "data": result}
+                        except:
+                            continue
+
+                error_msg = f"No se pudo parsear JSON: {str(e)}"
+                if context:
+                    context.fail_step("openai_call", error_msg)
+                return {
+                    "status": "partial",
+                    "raw_content": content_cleaned,
+                    "error": error_msg
+                }
+
     except Exception as e:
         error_msg = f"Error en llamada OpenAI: {str(e)}"
         if context:

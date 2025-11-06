@@ -2,14 +2,14 @@
 Validador Integrado - Sistema Completo de 3 Criterios
 
 Orquesta la validación completa de un puesto usando:
-- Criterio 1: Congruencia de Verbos Débiles
-- Criterio 2: Validación Contextual (Referencias Institucionales)
+- Criterio 1: Congruencia de Verbos Débiles (CON LLM)
+- Criterio 2: Validación Contextual (Referencias Institucionales CON LLM)
 - Criterio 3: Apropiación de Impacto Jerárquico
 
 Decisión Final: Matriz 2-of-3
 
-Fecha: 2025-11-05
-Versión: 5.0
+Fecha: 2025-11-06
+Versión: 5.0 - ADAPTADO CON VALIDADORES LLM DE V4
 """
 
 import logging
@@ -17,6 +17,9 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 
 from src.validators.criterion_3_validator import Criterion3Validator
+from src.validators.contextual_verb_validator import ContextualVerbValidator
+from src.validators.verb_semantic_analyzer import VerbSemanticAnalyzer
+from src.validators.shared_utilities import APFContext
 from src.validators.models import (
     Criterion1Result,
     Criterion2Result,
@@ -33,8 +36,7 @@ class IntegratedValidator:
     """
     Validador integrado que ejecuta los 3 criterios y calcula decisión final.
 
-    Este validador simplifica la integración al proveer una interfaz única
-    para validar puestos completos.
+    VERSIÓN ADAPTADA: Usa validadores LLM reales de v4 para Criterio 1 y 2.
     """
 
     def __init__(
@@ -47,18 +49,28 @@ class IntegratedValidator:
 
         Args:
             normativa_fragments: Fragmentos de normativa para validación
-            openai_api_key: API key de OpenAI (para Criterio 2)
+            openai_api_key: API key de OpenAI (para validadores LLM)
         """
         self.normativa_fragments = normativa_fragments or []
         self.openai_api_key = openai_api_key
 
-        # Inicializar Criterion3Validator
+        # Crear contexto APF para validadores v4
+        self.context = APFContext()
+        if openai_api_key:
+            self.context.set_data('openai_api_key', openai_api_key, 'IntegratedValidator')
+            self.context.set_data('api_key', openai_api_key, 'IntegratedValidator')
+
+        # Inicializar validadores LLM de v4
+        self.verb_analyzer = VerbSemanticAnalyzer(context=self.context)
+        self.contextual_validator = ContextualVerbValidator(context=self.context)
+
+        # Inicializar Criterion3Validator (ya existente en v5)
         self.criterion3_validator = Criterion3Validator(
             normativa_fragments=normativa_fragments,
             threshold=0.50
         )
 
-        logger.info("[IntegratedValidator] Inicializado correctamente")
+        logger.info("[IntegratedValidator] Inicializado con validadores LLM v4")
 
     def validate_puesto(
         self,
@@ -86,8 +98,8 @@ class IntegratedValidator:
 
         logger.info(f"[IntegratedValidator] Validando puesto {codigo}")
 
-        # Ejecutar 3 criterios
-        criterion_1 = self._validate_criterion_1(codigo, funciones)
+        # Ejecutar 3 criterios CON LLM
+        criterion_1 = self._validate_criterion_1(codigo, funciones, nivel)
         criterion_2 = self._validate_criterion_2(codigo, puesto_data)
         criterion_3 = self.criterion3_validator.validate(
             puesto_codigo=codigo,
@@ -130,55 +142,80 @@ class IntegratedValidator:
     def _validate_criterion_1(
         self,
         codigo: str,
-        funciones: List[Dict[str, Any]]
+        funciones: List[Dict[str, Any]],
+        nivel_salarial: str = "P"
     ) -> Criterion1Result:
         """
         Valida Criterio 1: Congruencia de Verbos Débiles.
 
-        Esta es una implementación simplificada que detecta verbos débiles
-        básicos. En producción, esto podría usar un LLM.
+        VERSIÓN LLM: Usa VerbSemanticAnalyzer de v4 con análisis LLM real.
 
         Args:
             codigo: Código del puesto
             funciones: Lista de funciones
+            nivel_salarial: Nivel jerárquico del puesto
 
         Returns:
             Criterion1Result
         """
-        logger.info(f"[Criterio 1] Validando puesto {codigo}")
-
-        # Verbos débiles básicos
-        verbos_debiles = [
-            "coadyuvar", "apoyar", "auxiliar", "gestionar",
-            "procurar", "colaborar", "contribuir"
-        ]
+        logger.info(f"[Criterio 1 LLM] Validando puesto {codigo} (nivel {nivel_salarial})")
 
         total_functions = len(funciones)
         critical_count = 0
+        moderate_count = 0
+        weak_verbs_detected = []
 
+        # Analizar cada función con LLM
         for func in funciones:
-            que_hace = func.get("que_hace", "").lower()
+            verbo = func.get("verbo_accion", "").strip()
+            if not verbo:
+                # Fallback: extraer primer verbo de descripción
+                desc = func.get("descripcion_completa", "") or func.get("que_hace", "")
+                if desc:
+                    verbo = desc.split()[0] if desc.split() else ""
 
-            # Detectar si tiene verbo débil
-            es_debil = any(verbo in que_hace for verbo in verbos_debiles)
+            if verbo:
+                try:
+                    # Llamar a verb_analyzer con LLM
+                    analysis = self.verb_analyzer.analyze_verb_for_level(
+                        verb=verbo,
+                        nivel_jerarquico=nivel_salarial[0] if nivel_salarial else "P",
+                        normativa_context=None
+                    )
 
-            if es_debil:
-                critical_count += 1
+                    # Contar según severidad
+                    if analysis.is_weak_verb:
+                        weak_verbs_detected.append(verbo)
+                        if analysis.has_normative_backing:
+                            moderate_count += 1
+                        else:
+                            critical_count += 1
 
+                except Exception as e:
+                    logger.warning(f"[Criterio 1 LLM] Error analizando verbo '{verbo}': {e}")
+                    # Fallback: asumir verbo débil crítico
+                    critical_count += 1
+                    weak_verbs_detected.append(verbo)
+
+        # Calcular tasa de fallo (solo CRITICAL cuenta)
         critical_rate = critical_count / total_functions if total_functions > 0 else 0.0
-        is_passing = critical_rate <= 0.50
+        is_passing = critical_rate <= 0.50  # Umbral del 50%
 
         logger.info(
-            f"[Criterio 1] Tasa verbos débiles: {critical_rate:.0%} ({'PASS' if is_passing else 'FAIL'})"
+            f"[Criterio 1 LLM] Verbos débiles: {len(weak_verbs_detected)}, "
+            f"CRITICAL: {critical_count}, MODERATE: {moderate_count}, "
+            f"Tasa crítica: {critical_rate:.0%} ({'PASS' if is_passing else 'FAIL'})"
         )
 
         return Criterion1Result(
             result=ValidationResult.PASS if is_passing else ValidationResult.FAIL,
             total_functions=total_functions,
             functions_critical=critical_count,
+            functions_moderate=moderate_count,
             critical_rate=critical_rate,
-            confidence=0.80,
-            reasoning=f"Verbos débiles: {critical_count}/{total_functions} ({critical_rate:.0%})"
+            confidence=0.90,  # Mayor confianza con LLM
+            reasoning=f"Análisis LLM: {critical_count} funciones CRÍTICAS de {total_functions} "
+                     f"({critical_rate:.0%}). Umbral: 50%"
         )
 
     def _validate_criterion_2(
@@ -189,8 +226,7 @@ class IntegratedValidator:
         """
         Valida Criterio 2: Validación Contextual.
 
-        Implementación simplificada que verifica referencias institucionales
-        básicas. En producción, esto usaría LLM para análisis más profundo.
+        VERSIÓN LLM: Usa ContextualVerbValidator de v4 con análisis LLM real.
 
         Args:
             codigo: Código del puesto
@@ -199,44 +235,59 @@ class IntegratedValidator:
         Returns:
             Criterion2Result
         """
-        logger.info(f"[Criterio 2] Validando puesto {codigo}")
+        logger.info(f"[Criterio 2 LLM] Validando puesto {codigo}")
 
-        # Extraer UR
-        ur = puesto_data.get("unidad_responsable", "").lower()
-
-        # Detectar organismo principal
-        organismo_principal = None
-        if "turismo" in ur:
-            organismo_principal = "turismo"
-        elif "agricultura" in ur or "sagarpa" in ur:
-            organismo_principal = "agricultura"
-        elif "salud" in ur:
-            organismo_principal = "salud"
-        # ... etc
-
-        # Verificar si las funciones mencionan el mismo organismo
+        # Extraer datos del puesto
+        denominacion = puesto_data.get("denominacion", "")
+        objetivo = puesto_data.get("objetivo_general", "")
         funciones = puesto_data.get("funciones", [])
-        texto_funciones = " ".join([
-            f.get("descripcion_completa", "") + " " +
-            f.get("que_hace", "") + " " +
-            f.get("para_que_lo_hace", "")
-            for f in funciones
-        ]).lower()
+        nivel = puesto_data.get("nivel_salarial", "P")
 
-        # Validación simple: si encontramos el organismo en funciones, es coherente
-        match = organismo_principal is None or organismo_principal in texto_funciones
+        # Detectar verbos débiles para pasar al validador contextual
+        weak_verbs = []
+        for func in funciones:
+            verbo = func.get("verbo_accion", "").strip()
+            if verbo:
+                weak_verbs.append(verbo)
 
-        logger.info(
-            f"[Criterio 2] Referencias institucionales: {'coinciden' if match else 'NO coinciden'}"
-        )
+        try:
+            # Llamar a contextual_validator con LLM
+            validation_result = self.contextual_validator.validate_global(
+                puesto_nombre=denominacion,
+                objetivo_general=objetivo,
+                funciones=funciones,
+                nivel_jerarquico=nivel[0] if nivel else "P",
+                weak_verbs_detected=weak_verbs
+            )
 
-        return Criterion2Result(
-            result=ValidationResult.PASS if match else ValidationResult.FAIL,
-            institutional_references_match=match,
-            alignment_classification="ALIGNED" if match else "NOT_ALIGNED",
-            alignment_confidence=0.85 if match else 0.30,
-            reasoning=f"Referencias institucionales {'coinciden' if match else 'NO coinciden'}"
-        )
+            # Mapear resultado de v4 a Criterion2Result de v5
+            alignment = validation_result.alignment_level.upper()
+            is_aligned = alignment in ["ALIGNED", "PARTIALLY_ALIGNED"]
+
+            logger.info(
+                f"[Criterio 2 LLM] Alineación: {alignment}, "
+                f"Confianza: {validation_result.confidence:.2f}, "
+                f"Resultado: {'PASS' if is_aligned else 'FAIL'}"
+            )
+
+            return Criterion2Result(
+                result=ValidationResult.PASS if is_aligned else ValidationResult.FAIL,
+                institutional_references_match=validation_result.institutional_references_match,
+                alignment_classification=alignment,
+                alignment_confidence=validation_result.confidence,
+                reasoning=validation_result.reasoning or f"Análisis LLM: {alignment}"
+            )
+
+        except Exception as e:
+            logger.error(f"[Criterio 2 LLM] Error en validación: {e}")
+            # Fallback: rechazar con baja confianza
+            return Criterion2Result(
+                result=ValidationResult.FAIL,
+                institutional_references_match=False,
+                alignment_classification="ERROR",
+                alignment_confidence=0.30,
+                reasoning=f"Error en validación LLM: {str(e)}"
+            )
 
     def _format_criterion_1(self, criterion: Criterion1Result) -> Dict[str, Any]:
         """Formatea resultado de Criterio 1 para JSON"""
