@@ -659,16 +659,15 @@ def execute_analysis():
                         "funciones": []
                     }
 
-                    # Extraer funciones
-                    funciones_objetivo = puesto_data.get('funciones_y_objetivo', {})
-                    funciones_list = funciones_objetivo.get('funciones', [])
+                    # Extraer funciones - están directamente en puesto_data['funciones']
+                    funciones_list = puesto_data.get('funciones', [])
 
                     for func in funciones_list:
                         puesto_for_validator["funciones"].append({
                             "id": func.get('numero', 'FXX'),
-                            "descripcion_completa": func.get('descripcion', ''),
-                            "que_hace": func.get('descripcion', '')[:100],  # Simplificado
-                            "para_que_lo_hace": ""  # No disponible en formato simple
+                            "descripcion_completa": func.get('descripcion_completa', ''),
+                            "que_hace": func.get('que_hace', func.get('descripcion_completa', '')[:100]),
+                            "para_que_lo_hace": func.get('para_que_lo_hace', '')
                         })
 
                     if len(puesto_for_validator["funciones"]) > 0:
