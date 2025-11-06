@@ -608,10 +608,18 @@ def execute_analysis():
                             continue
 
                     if filters.get('niveles'):
-                        nivel = puesto_data.get('identificacion_puesto', {}).get('nivel_salarial', '')
-                        if nivel and len(nivel) > 0:
+                        # nivel_salarial es un diccionario {"codigo": "O11", "descripcion": ...}
+                        nivel_obj = puesto_data.get('identificacion_puesto', {}).get('nivel_salarial', {})
+
+                        # Extraer el código
+                        if isinstance(nivel_obj, dict):
+                            nivel_codigo = nivel_obj.get('codigo', '')
+                        else:
+                            nivel_codigo = str(nivel_obj) if nivel_obj else ''
+
+                        if nivel_codigo and len(nivel_codigo) > 0:
                             # Extraer primera letra del nivel (G, H, J, K, etc.)
-                            nivel_letra = nivel[0].upper()
+                            nivel_letra = nivel_codigo[0].upper()
                             if nivel_letra not in filters['niveles']:
                                 continue
                         else:
@@ -619,11 +627,20 @@ def execute_analysis():
                             continue
 
                     # Convertir al formato esperado por el validador
+                    identificacion = puesto_data.get('identificacion_puesto', {})
+
+                    # Extraer nivel_salarial correctamente (es un dict)
+                    nivel_obj = identificacion.get('nivel_salarial', {})
+                    if isinstance(nivel_obj, dict):
+                        nivel_codigo = nivel_obj.get('codigo', '')
+                    else:
+                        nivel_codigo = str(nivel_obj) if nivel_obj else ''
+
                     puesto_for_validator = {
-                        "codigo": puesto_data.get('identificacion_puesto', {}).get('codigo', codigo_puesto),
-                        "denominacion": puesto_data.get('identificacion_puesto', {}).get('nombre_puesto', ''),
-                        "nivel_salarial": puesto_data.get('identificacion_puesto', {}).get('nivel_salarial', ''),
-                        "unidad_responsable": puesto_data.get('identificacion_puesto', {}).get('unidad_responsable', ''),
+                        "codigo": identificacion.get('codigo_puesto', codigo_puesto),
+                        "denominacion": identificacion.get('denominacion_puesto', ''),
+                        "nivel_salarial": nivel_codigo,
+                        "unidad_responsable": identificacion.get('unidad_responsable', ''),
                         "funciones": []
                     }
 
