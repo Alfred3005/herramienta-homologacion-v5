@@ -184,9 +184,13 @@ class IntegratedValidator:
                     )
 
                     # Contar según severidad
-                    if analysis.is_weak_verb:
+                    # Nota: VerbAnalysisResult usa 'is_weak' no 'is_weak_verb'
+                    if analysis.is_weak:
                         weak_verbs_detected.append(verbo)
-                        if analysis.has_normative_backing:
+                        # Si tiene respaldo normativo, es MODERATE, sino CRITICAL
+                        # Verificar si viene de normativa o tiene confianza alta y es apropiado
+                        if (analysis.source == "normativa" or
+                            (analysis.is_appropriate and analysis.confidence > 0.7)):
                             moderate_count += 1
                         else:
                             critical_count += 1
