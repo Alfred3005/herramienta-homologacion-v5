@@ -151,6 +151,7 @@ class FunctionImpactAnalysis:
     # Coherencia vs perfil esperado
     scope_coherent: bool = True
     consequences_coherent: bool = True
+    complexity_coherent: bool = True
 
     # Respaldo normativo
     normative_backing: Optional[str] = None
