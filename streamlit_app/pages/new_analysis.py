@@ -585,10 +585,20 @@ def execute_analysis():
                 # Listar todos los códigos de puesto
                 codigos_puestos = adapter.listar_puestos(limite=9999)  # Sin límite
 
+                st.info(f"📋 DEBUG: Se encontraron {len(codigos_puestos)} códigos de puesto en total")
+
                 # Aplicar filtros
                 filters = st.session_state.filters_config
+                st.info(f"🔍 DEBUG: Filtros activos: {filters}")
 
                 status_text.text(f"🔍 Procesando {len(codigos_puestos)} puestos...")
+
+                # Contadores para debugging
+                procesados = 0
+                rechazados_por_ur = 0
+                rechazados_por_nivel = 0
+                sin_funciones = 0
+                con_error = 0
 
                 for idx, codigo_puesto in enumerate(codigos_puestos):
                     # Actualizar progreso cada 10 puestos
@@ -597,14 +607,17 @@ def execute_analysis():
 
                     # Convertir puesto al formato APF
                     puesto_data = adapter.convertir_puesto(codigo_puesto)
+                    procesados += 1
 
                     if 'error' in puesto_data:
+                        con_error += 1
                         continue
 
                     # Aplicar filtros básicos
                     if filters.get('unidad_responsable'):
                         ur = puesto_data.get('identificacion_puesto', {}).get('unidad_responsable', '')
                         if filters['unidad_responsable'] and filters['unidad_responsable'] not in ur:
+                            rechazados_por_ur += 1
                             continue
 
                     if filters.get('niveles'):
@@ -621,9 +634,11 @@ def execute_analysis():
                             # Extraer primera letra del nivel (G, H, J, K, etc.)
                             nivel_letra = nivel_codigo[0].upper()
                             if nivel_letra not in filters['niveles']:
+                                rechazados_por_nivel += 1
                                 continue
                         else:
                             # Si no hay nivel, saltar este puesto
+                            rechazados_por_nivel += 1
                             continue
 
                     # Convertir al formato esperado por el validador
@@ -658,8 +673,20 @@ def execute_analysis():
 
                     if len(puesto_for_validator["funciones"]) > 0:
                         puestos_to_validate.append(puesto_for_validator)
+                    else:
+                        sin_funciones += 1
 
+                # Mostrar resumen de filtrado
                 st.success(f"✅ {len(puestos_to_validate)} puestos listos para validar")
+                st.info(f"""
+                📊 **Resumen de Filtrado:**
+                - Total procesados: {procesados}
+                - Con errores: {con_error}
+                - Rechazados por UR: {rechazados_por_ur}
+                - Rechazados por nivel: {rechazados_por_nivel}
+                - Sin funciones: {sin_funciones}
+                - **Aprobados**: {len(puestos_to_validate)}
+                """)
 
             except Exception as e:
                 st.error(f"Error extrayendo puestos: {str(e)}")
