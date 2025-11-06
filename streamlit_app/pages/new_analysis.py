@@ -13,8 +13,8 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Cargar variables de entorno
-load_dotenv()
+# Cargar variables de entorno (override=True para sobrescribir env vars del sistema)
+load_dotenv(override=True)
 
 # Agregar path al sistema
 root_dir = Path(__file__).parent.parent.parent
