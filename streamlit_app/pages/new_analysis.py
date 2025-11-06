@@ -9,7 +9,12 @@ from pathlib import Path
 import sys
 import time
 import json
+import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 
 # Agregar path al sistema
 root_dir = Path(__file__).parent.parent.parent
@@ -725,8 +730,15 @@ def execute_analysis():
         status_text.text("⚙️ Inicializando sistema de validación...")
         progress_bar.progress(40)
 
+        # Obtener API key
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            st.error("❌ OPENAI_API_KEY no configurada en .env")
+            return
+
         validator = IntegratedValidator(
-            normativa_fragments=normativa_fragments
+            normativa_fragments=normativa_fragments,
+            openai_api_key=openai_api_key
         )
 
         # Paso 5: Validar puestos

@@ -74,3 +74,4 @@ test_*.py
 test_*.json
 prueba_*.json
 puesto_*_test.txt
+.env

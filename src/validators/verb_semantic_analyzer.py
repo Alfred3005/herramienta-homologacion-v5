@@ -12,7 +12,7 @@ import pickle
 from pathlib import Path
 from datetime import datetime
 
-from shared_utilities import (
+from src.validators.shared_utilities import (
     APFContext, robust_openai_call, VERB_HIERARCHY, WEAK_VERBS,
     LOGGING_CONFIG
 )

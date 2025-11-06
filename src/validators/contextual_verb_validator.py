@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from shared_utilities import (
+from src.validators.shared_utilities import (
     APFContext, robust_openai_call, VERB_HIERARCHY, WEAK_VERBS,
     LOGGING_CONFIG
 )
