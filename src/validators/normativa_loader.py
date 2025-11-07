@@ -19,10 +19,10 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 
 # Importar motor de embeddings
-from embedding_engine import EmbeddingEngine  # AGREGADO
+from src.validators.embedding_engine import EmbeddingEngine  # AGREGADO
 
 # Importar utilidades del sistema unificado
-from shared_utilities import (
+from src.validators.shared_utilities import (
     APFAgent, APFContext, clean_text_for_processing,
     robust_openai_call, DEFAULT_PATHS, LOGGING_CONFIG
 )
