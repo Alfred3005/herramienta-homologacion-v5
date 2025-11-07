@@ -70,7 +70,7 @@ class IntegratedValidator:
                 self.normativa_loader = create_loader_from_fragments(
                     text_fragments=normativa_fragments,
                     document_title="Reglamento Interior",
-                    use_embeddings=True,  # Habilitado para precisión semántica (fix v5.26)
+                    use_embeddings=False,  # Deshabilitado por ahora para rapidez
                     context=self.context
                 )
                 logger.info("[IntegratedValidator] NormativaLoader creado exitosamente")
@@ -245,14 +245,14 @@ class IntegratedValidator:
         tasa_aprobadas = len(aprobadas) / total_functions if total_functions > 0 else 0.0
         tasa_rechazadas = len(rechazadas) / total_functions if total_functions > 0 else 0.0
 
-        # Decisión: FAIL solo si > 50% críticas (v4 compatibility - funciones observadas cuentan como OK)
-        is_passing = tasa_rechazadas <= 0.50
+        # Decisión: PASS si >= 50% aprobadas (Protocolo SABG v1.1 - Umbral Permisivo)
+        is_passing = tasa_aprobadas >= 0.50
 
         logger.info(
-            f"[Criterio 1 v5.27 SABG] Aprobadas: {len(aprobadas)} ({tasa_aprobadas:.0%}), "
+            f"[Criterio 1 v5.20 SABG] Aprobadas: {len(aprobadas)} ({tasa_aprobadas:.0%}), "
             f"Observadas: {len(observadas)} ({len(observadas)/total_functions:.0%}), "
             f"Rechazadas: {len(rechazadas)} ({tasa_rechazadas:.0%}) → "
-            f"{'PASS' if is_passing else 'FAIL'} (umbral: críticas ≤ 50%)"
+            f"{'PASS' if is_passing else 'FAIL'}"
         )
 
         return Criterion1Result(
@@ -266,10 +266,9 @@ class IntegratedValidator:
             threshold=0.50,
             confidence=0.95,  # Alta confianza con análisis semántico LLM de 5 criterios
             reasoning=(
-                f"Análisis semántico Protocolo SABG v4-compatible: {len(aprobadas)} aprobadas "
-                f"({tasa_aprobadas:.0%}), {len(observadas)} observadas ({len(observadas)/total_functions:.0%}), "
-                f"{len(rechazadas)} rechazadas ({tasa_rechazadas:.0%}). "
-                f"Umbral: funciones críticas ≤ 50%. Resultado: {'PASS' if is_passing else 'FAIL'}."
+                f"Análisis semántico Protocolo SABG: {len(aprobadas)} aprobadas "
+                f"({tasa_aprobadas:.0%}), {len(rechazadas)} rechazadas ({tasa_rechazadas:.0%}). "
+                f"Umbral: 50% aprobadas."
             ),
             details={
                 "aprobadas": [e.to_dict() for e in aprobadas if e],
