@@ -217,7 +217,7 @@ class FunctionSemanticEvaluator:
             query = f"{puesto_nombre} {verbo} {funcion_text[:100]}"
             search_results = self.normativa_loader.semantic_search(
                 query=query,
-                max_results=5
+                max_results=15  # Aumentado para cobertura normativa completa (fix v5.26)
             )
 
             if not search_results:

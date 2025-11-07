@@ -70,7 +70,7 @@ class IntegratedValidator:
                 self.normativa_loader = create_loader_from_fragments(
                     text_fragments=normativa_fragments,
                     document_title="Reglamento Interior",
-                    use_embeddings=False,  # Deshabilitado por ahora para rapidez
+                    use_embeddings=True,  # Habilitado para precisión semántica (fix v5.26)
                     context=self.context
                 )
                 logger.info("[IntegratedValidator] NormativaLoader creado exitosamente")

@@ -331,8 +331,8 @@ class NormativeDocument:
             intersection = query_words.intersection(chunk_words)
             if len(intersection) > 0:
                 confidence = len(intersection) / len(query_words.union(chunk_words))
-                
-                if confidence > 0.1:  # Umbral mínimo
+
+                if confidence > 0.15:  # Umbral optimizado para precisión (fix v5.26)
                     match = SemanticMatch(
                         document_id=self.doc_id,
                         document_title=self.title,
