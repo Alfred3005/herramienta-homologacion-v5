@@ -49,20 +49,65 @@ class FunctionEvaluationResult:
     razonamiento_final: str
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convierte a diccionario para serialización"""
+        """
+        Convierte a diccionario para serialización COMPLETA.
+
+        OBJETIVO: Máxima transparencia y auditabilidad.
+        Documenta CÓMO se evaluó cada criterio y POR QUÉ se dio cada score.
+        """
         return {
-            "funcion_text": self.funcion_text[:100] + "..." if len(self.funcion_text) > 100 else self.funcion_text,
+            # ========== FUNCIÓN EVALUADA (COMPLETA) ==========
+            "funcion_text": self.funcion_text,  # ✅ Función completa, sin truncar
             "verbo": self.verbo,
-            "scores": {
-                "verbo": self.criterio_verbo.score,
-                "normativa": self.criterio_normativa.score,
-                "estructura": self.criterio_estructura.score,
-                "semantica": self.criterio_semantica.score,
-                "jerarquica": self.criterio_jerarquica.score,
-                "global": self.score_global
+
+            # ========== SCORES Y RAZONAMIENTO POR CRITERIO ==========
+            "criterios": {
+                "verbo": {
+                    "score": round(self.criterio_verbo.score, 3),
+                    "peso": 0.25,
+                    "razonamiento": self.criterio_verbo.reasoning,
+                    "metadata": self.criterio_verbo.metadata
+                },
+                "normativa": {
+                    "score": round(self.criterio_normativa.score, 3),
+                    "peso": 0.25,
+                    "razonamiento": self.criterio_normativa.reasoning,
+                    "metadata": self.criterio_normativa.metadata
+                },
+                "estructura": {
+                    "score": round(self.criterio_estructura.score, 3),
+                    "peso": 0.20,
+                    "razonamiento": self.criterio_estructura.reasoning,
+                    "metadata": self.criterio_estructura.metadata
+                },
+                "semantica": {
+                    "score": round(self.criterio_semantica.score, 3),
+                    "peso": 0.20,
+                    "razonamiento": self.criterio_semantica.reasoning,
+                    "metadata": self.criterio_semantica.metadata
+                },
+                "jerarquica": {
+                    "score": round(self.criterio_jerarquica.score, 3),
+                    "peso": 0.10,
+                    "razonamiento": self.criterio_jerarquica.reasoning,
+                    "metadata": self.criterio_jerarquica.metadata
+                }
             },
+
+            # ========== RESULTADO FINAL ==========
+            "score_global": round(self.score_global, 3),
             "clasificacion": self.clasificacion,
-            "razonamiento": self.razonamiento_final
+            "razonamiento_final": self.razonamiento_final,
+
+            # ========== RESUMEN PARA VISUALIZACIÓN RÁPIDA ==========
+            "scores_summary": {
+                "verbo": round(self.criterio_verbo.score, 2),
+                "normativa": round(self.criterio_normativa.score, 2),
+                "estructura": round(self.criterio_estructura.score, 2),
+                "semantica": round(self.criterio_semantica.score, 2),
+                "jerarquica": round(self.criterio_jerarquica.score, 2),
+                "global": round(self.score_global, 2)
+            }
         }
 
 

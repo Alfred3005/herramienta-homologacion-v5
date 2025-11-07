@@ -367,24 +367,155 @@ class IntegratedValidator:
         return result
 
     def _format_criterion_2(self, criterion: Criterion2Result) -> Dict[str, Any]:
-        """Formatea resultado de Criterio 2 para JSON"""
-        return {
+        """
+        Formatea resultado de Criterio 2 para JSON con máxima transparencia.
+
+        Incluye razonamiento LLM, evidencias y flags para auditabilidad completa.
+        """
+        result = {
+            # ========== RESULTADO ==========
             "resultado": criterion.result.value,
-            "referencias_coinciden": criterion.institutional_references_match,
-            "alineacion": criterion.alignment_classification,
-            "confianza": round(criterion.alignment_confidence, 2)
+
+            # ========== ANÁLISIS DE REFERENCIAS INSTITUCIONALES ==========
+            "referencias_institucionales": {
+                "coinciden": criterion.institutional_references_match,
+                "explicacion": "Organismos/secretarías mencionadas en puesto coinciden con normativa proporcionada"
+            },
+
+            # ========== ANÁLISIS DE ALINEACIÓN ==========
+            "alineacion": {
+                "clasificacion": criterion.alignment_classification,  # ALIGNED, PARTIALLY_ALIGNED, NOT_ALIGNED
+                "confianza": round(criterion.alignment_confidence, 2),
+                "respaldo_jerarquico": criterion.has_hierarchical_backing,
+                "explicacion_respaldo": "Funciones derivables de atribuciones del jefe directo" if criterion.has_hierarchical_backing else "No aplica o no detectado"
+            },
+
+            # ========== RAZONAMIENTO DETALLADO LLM ==========
+            "razonamiento": criterion.reasoning,
+
+            # ========== EVIDENCIAS NORMATIVAS USADAS ==========
+            "evidencias": [
+                {
+                    "fuente": ev.source,
+                    "fragmento": ev.content_snippet,
+                    "similarity_score": round(ev.similarity_score, 3),
+                    "articulo": ev.article_reference
+                }
+                for ev in criterion.evidence_found
+            ] if criterion.evidence_found else [],
+
+            # ========== FLAGS/PROBLEMAS DETECTADOS ==========
+            "flags": [
+                {
+                    "id": flag.flag_id,
+                    "severidad": flag.severity.value,
+                    "titulo": flag.title,
+                    "descripcion": flag.description,
+                    "riesgo_legal": flag.legal_risk,
+                    "solucion_sugerida": flag.suggested_fix,
+                    "referencia_normativa": flag.normative_reference
+                }
+                for flag in criterion.flags_detected
+            ] if criterion.flags_detected else []
         }
 
+        return result
+
     def _format_criterion_3(self, criterion: Criterion3Result) -> Dict[str, Any]:
-        """Formatea resultado de Criterio 3 para JSON"""
-        return {
+        """
+        Formatea resultado de Criterio 3 para JSON con máxima transparencia.
+
+        Incluye análisis detallado de impacto jerárquico por función y evidencias.
+        """
+        result = {
+            # ========== RESULTADO ==========
             "resultado": criterion.result.value,
-            "tasa_critica": round(criterion.critical_rate, 2),
-            "threshold": criterion.threshold,
-            "funciones_critical": criterion.functions_critical,
-            "funciones_moderate": criterion.functions_moderate,
-            "total_funciones": criterion.total_functions
+
+            # ========== MÉTRICAS AGREGADAS ==========
+            "metricas": {
+                "tasa_critica": round(criterion.critical_rate, 2),
+                "threshold": criterion.threshold,
+                "total_funciones": criterion.total_functions,
+                "funciones_critical": criterion.functions_critical,  # Sin respaldo normativo
+                "funciones_moderate": criterion.functions_moderate,  # Con respaldo (anotación)
+                "funciones_con_verbo_inapropiado": criterion.functions_with_inappropriate_verbs,
+                "funciones_con_verbo_prohibido": criterion.functions_with_forbidden_verbs,
+                "funciones_con_alcance_discrepante": criterion.functions_with_scope_discrepancy,
+                "funciones_con_consecuencias_discrepantes": criterion.functions_with_consequences_discrepancy
+            },
+
+            # ========== ANÁLISIS DETALLADO POR FUNCIÓN ==========
+            "analisis_funciones": [
+                {
+                    "funcion_id": fa.funcion_id,
+                    "descripcion": fa.descripcion,
+                    "que_hace": fa.que_hace,
+                    "para_que_lo_hace": fa.para_que_lo_hace,
+
+                    "verbo": {
+                        "verbo_principal": fa.verbo_principal,
+                        "es_apropiado": fa.es_verbo_apropiado,
+                        "es_prohibido": fa.es_verbo_prohibido
+                    },
+
+                    "impacto_detectado": {
+                        "alcance": fa.detected_scope,  # local, institutional, interinstitutional, strategic_national
+                        "consecuencias": fa.detected_consequences,  # operational, tactical, strategic, systemic
+                        "complejidad": fa.detected_complexity  # routine, analytical, strategic, transformational
+                    },
+
+                    "coherencia": {
+                        "alcance_coherente": fa.scope_coherent,
+                        "consecuencias_coherentes": fa.consequences_coherent,
+                        "complejidad_coherente": fa.complexity_coherent
+                    },
+
+                    "respaldo_normativo": {
+                        "tiene_respaldo": fa.normative_backing is not None,
+                        "fragmento": fa.normative_backing,
+                        "confianza": round(fa.normative_confidence, 3) if fa.normative_confidence else 0.0
+                    },
+
+                    "severidad": fa.severity.value,
+                    "problema_detectado": fa.issue_detected,
+                    "solucion_sugerida": fa.suggested_fix
+                }
+                for fa in criterion.function_analyses
+            ] if criterion.function_analyses else [],
+
+            # ========== RAZONAMIENTO GENERAL ==========
+            "razonamiento": criterion.reasoning,
+
+            # ========== FRAGMENTOS NORMATIVOS USADOS ==========
+            "fragmentos_normativos": criterion.normative_fragments_used if criterion.normative_fragments_used else [],
+
+            # ========== FLAGS/PROBLEMAS DETECTADOS ==========
+            "flags": [
+                {
+                    "id": flag.flag_id,
+                    "severidad": flag.severity.value,
+                    "titulo": flag.title,
+                    "descripcion": flag.description,
+                    "riesgo_legal": flag.legal_risk,
+                    "solucion_sugerida": flag.suggested_fix,
+                    "referencia_normativa": flag.normative_reference
+                }
+                for flag in criterion.flags_detected
+            ] if criterion.flags_detected else [],
+
+            # ========== EVIDENCIAS ==========
+            "evidencias": [
+                {
+                    "fuente": ev.source,
+                    "fragmento": ev.content_snippet,
+                    "similarity_score": round(ev.similarity_score, 3),
+                    "articulo": ev.article_reference
+                }
+                for ev in criterion.evidence_found
+            ] if criterion.evidence_found else []
         }
+
+        return result
 
     def _get_verb_normativa_context(self, verbo: str) -> Optional[str]:
         """
