@@ -348,7 +348,7 @@ class IntegratedValidator:
 
     def _format_criterion_1(self, criterion: Criterion1Result) -> Dict[str, Any]:
         """Formatea resultado de Criterio 1 para JSON (v5.20+)"""
-        return {
+        result = {
             "resultado": criterion.result.value,
             "tasa_aprobadas": round(criterion.approval_rate, 2),
             "tasa_critica": round(criterion.critical_rate, 2),
@@ -359,6 +359,12 @@ class IntegratedValidator:
             "total_funciones": criterion.total_functions,
             "metodo": "Análisis Semántico Protocolo SABG v1.1"
         }
+
+        # AGREGAR DETALLES DE EVALUACIÓN POR FUNCIÓN (v5.20+)
+        if criterion.details:
+            result["detalles"] = criterion.details
+
+        return result
 
     def _format_criterion_2(self, criterion: Criterion2Result) -> Dict[str, Any]:
         """Formatea resultado de Criterio 2 para JSON"""
