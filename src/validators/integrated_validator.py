@@ -62,11 +62,11 @@ class IntegratedValidator:
             self.context.set_data('api_key', openai_api_key, 'IntegratedValidator')
 
         # Crear NormativaLoader en memoria si hay fragmentos
-        normativa_loader = None
+        self.normativa_loader = None
         if normativa_fragments:
             try:
                 logger.info(f"[IntegratedValidator] Creando NormativaLoader con {len(normativa_fragments)} fragmentos")
-                normativa_loader = create_loader_from_fragments(
+                self.normativa_loader = create_loader_from_fragments(
                     text_fragments=normativa_fragments,
                     document_title="Reglamento Interior",
                     use_embeddings=False,  # Deshabilitado por ahora para rapidez
@@ -75,12 +75,12 @@ class IntegratedValidator:
                 logger.info("[IntegratedValidator] NormativaLoader creado exitosamente")
             except Exception as e:
                 logger.error(f"[IntegratedValidator] Error creando NormativaLoader: {e}")
-                normativa_loader = None
+                self.normativa_loader = None
 
         # Inicializar validadores LLM de v4
         self.verb_analyzer = VerbSemanticAnalyzer(context=self.context)
         self.contextual_validator = ContextualVerbValidator(
-            normativa_loader=normativa_loader,
+            normativa_loader=self.normativa_loader,
             context=self.context
         )
 
@@ -196,11 +196,14 @@ class IntegratedValidator:
 
             if verbo:
                 try:
-                    # Llamar a verb_analyzer con LLM
+                    # Buscar contexto normativo para el verbo
+                    normativa_context = self._get_verb_normativa_context(verbo)
+
+                    # Llamar a verb_analyzer con LLM y contexto normativo
                     analysis = self.verb_analyzer.analyze_verb_for_level(
                         verb=verbo,
                         nivel_jerarquico=nivel_salarial[0] if nivel_salarial else "P",
-                        normativa_context=None
+                        normativa_context=normativa_context
                     )
 
                     # Contar según severidad
@@ -342,6 +345,42 @@ class IntegratedValidator:
             "funciones_moderate": criterion.functions_moderate,
             "total_funciones": criterion.total_functions
         }
+
+    def _get_verb_normativa_context(self, verbo: str) -> Optional[str]:
+        """
+        Busca fragmentos de normativa relevantes para un verbo.
+
+        Args:
+            verbo: El verbo a buscar en la normativa
+
+        Returns:
+            Texto con fragmentos relevantes o None si no hay normativa
+        """
+        if not self.normativa_loader or not hasattr(self.normativa_loader, 'documents'):
+            return None
+
+        try:
+            # Buscar fragmentos relevantes usando búsqueda semántica
+            search_results = self.normativa_loader.semantic_search(
+                query=f"funciones atribuciones {verbo}",
+                max_results=3
+            )
+
+            if not search_results:
+                return None
+
+            # Construir contexto con los fragmentos encontrados
+            context_parts = []
+            for match in search_results:
+                # Truncar fragmentos muy largos
+                snippet = match.content_snippet[:300] if len(match.content_snippet) > 300 else match.content_snippet
+                context_parts.append(f"- {snippet}")
+
+            return "\n".join(context_parts) if context_parts else None
+
+        except Exception as e:
+            logger.warning(f"[IntegratedValidator] Error buscando contexto para verbo '{verbo}': {e}")
+            return None
 
     def validate_batch(
         self,
