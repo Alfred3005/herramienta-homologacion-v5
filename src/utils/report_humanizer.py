@@ -1,0 +1,397 @@
+"""
+Report Humanizer - Convierte análisis técnico JSON a reportes en lenguaje natural.
+
+Este módulo usa LLM para generar reportes humanizados a partir de los JSON de análisis,
+facilitando la comprensión y auditoría de las decisiones de validación.
+
+Autor: Claude Code v5.28
+Fecha: 2025-11-07
+"""
+
+import json
+import os
+from typing import Dict, Any, Literal
+from datetime import datetime
+from litellm import completion
+
+# Configuración LLM
+LLM_CONFIG = {
+    "model": "openai/gpt-4o-mini",
+    "temperature": 0.3,  # Un poco de creatividad para lenguaje natural
+    "max_tokens": 4000,  # Permitir reportes extensos
+}
+
+
+def generate_simplified_report(analisis_json: Dict[str, Any]) -> str:
+    """
+    Genera un reporte simplificado (resumen ejecutivo) en lenguaje natural.
+
+    Args:
+        analisis_json: Diccionario con el análisis completo
+
+    Returns:
+        String con el reporte en markdown
+    """
+
+    # Extraer información clave
+    puesto = analisis_json['resultados'][0]['puesto']
+    validacion = analisis_json['resultados'][0]['validacion']
+
+    prompt = f"""Eres un auditor experto de la Administración Pública Federal (APF) de México.
+Tu tarea es generar un **RESUMEN EJECUTIVO** en lenguaje claro y profesional a partir del siguiente análisis técnico de validación de un puesto.
+
+**INFORMACIÓN DEL PUESTO:**
+- Código: {puesto['codigo']}
+- Denominación: {puesto['denominacion']}
+- Nivel Salarial: {puesto['nivel']}
+
+**RESULTADO DE VALIDACIÓN:**
+- Decisión Final: {validacion['resultado']}
+- Criterios Aprobados: {validacion['criterios_aprobados']}/3
+- Confianza Global: {validacion['confianza']:.0%}
+
+**DETALLES POR CRITERIO:**
+
+**Criterio 1 - Análisis de Verbos:**
+- Resultado: {validacion['criterios']['criterio_1_verbos']['resultado']}
+- Funciones Aprobadas: {validacion['criterios']['criterio_1_verbos']['funciones_aprobadas']}/{validacion['criterios']['criterio_1_verbos']['total_funciones']}
+- Funciones Observadas: {validacion['criterios']['criterio_1_verbos']['funciones_observadas']}/{validacion['criterios']['criterio_1_verbos']['total_funciones']}
+- Funciones Rechazadas: {validacion['criterios']['criterio_1_verbos']['funciones_rechazadas']}/{validacion['criterios']['criterio_1_verbos']['total_funciones']}
+- Tasa Crítica: {validacion['criterios']['criterio_1_verbos']['tasa_critica']:.0%}
+
+**Criterio 2 - Validación Contextual:**
+- Resultado: {validacion['criterios']['criterio_2_contextual']['resultado']}
+- Alineación: {validacion['criterios']['criterio_2_contextual']['alineacion']['clasificacion']}
+- Confianza: {validacion['criterios']['criterio_2_contextual']['alineacion']['confianza']:.2f}
+
+**Criterio 3 - Impacto Jerárquico:**
+- Resultado: {validacion['criterios']['criterio_3_impacto']['resultado']}
+- Tasa Crítica: {validacion['criterios']['criterio_3_impacto']['metricas']['tasa_critica']:.0%}
+- Funciones Critical: {validacion['criterios']['criterio_3_impacto']['metricas'].get('funciones_critical', 0)}
+
+---
+
+**INSTRUCCIONES PARA EL REPORTE:**
+
+Genera un **RESUMEN EJECUTIVO** de 1-2 páginas en formato Markdown con las siguientes secciones:
+
+## 📋 RESUMEN EJECUTIVO - VALIDACIÓN DE PUESTO
+
+### 1. Identificación del Puesto
+- Presenta de manera clara los datos del puesto
+
+### 2. Decisión Final
+- Indica claramente si el puesto fue APROBADO o RECHAZADO
+- Explica qué significa este resultado en términos prácticos
+- Menciona la confianza global del análisis
+
+### 3. Análisis por Criterios
+
+#### Criterio 1: Análisis Semántico de Funciones
+- Explica QUÉ se evaluó (uso apropiado de verbos y respaldo normativo)
+- Resume los resultados (cuántas funciones pasaron/fallaron)
+- Explica POR QUÉ se obtuvo este resultado
+- Indica si el criterio PASÓ o FALLÓ y qué significa
+
+#### Criterio 2: Validación Contextual
+- Explica QUÉ se evaluó (alineación con normativa institucional)
+- Indica el nivel de alineación encontrado
+- Explica POR QUÉ se obtuvo este nivel de confianza
+- Indica si el criterio PASÓ o FALLÓ
+
+#### Criterio 3: Impacto Jerárquico
+- Explica QUÉ se evaluó (coherencia del impacto de las funciones con el nivel salarial)
+- Resume los resultados
+- Indica si el criterio PASÓ o FALLÓ
+
+### 4. Conclusión y Recomendaciones
+- Resume la decisión final en términos comprensibles
+- Indica acciones requeridas (si las hay)
+- Proporciona recomendaciones claras
+
+---
+
+**IMPORTANTE:**
+- Usa lenguaje profesional pero accesible (evita jerga técnica excesiva)
+- Explica los conceptos técnicos cuando sea necesario
+- Sé conciso pero completo
+- Enfócate en el "QUÉ", "CÓMO" y "POR QUÉ" de cada decisión
+- NO copies textualmente los datos técnicos, interprétalos
+"""
+
+    try:
+        response = completion(
+            model=LLM_CONFIG["model"],
+            messages=[{"role": "user", "content": prompt}],
+            temperature=LLM_CONFIG["temperature"],
+            max_tokens=LLM_CONFIG["max_tokens"]
+        )
+
+        reporte = response.choices[0].message.content
+
+        # Añadir metadatos
+        header = f"""# 📄 REPORTE DE VALIDACIÓN - MODO SIMPLIFICADO
+
+**Generado por:** Sistema de Validación APF v5.28
+**Fecha de generación:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+**Tipo de reporte:** Resumen Ejecutivo
+
+---
+
+"""
+
+        return header + reporte
+
+    except Exception as e:
+        return f"❌ Error al generar reporte simplificado: {str(e)}"
+
+
+def generate_detailed_report(analisis_json: Dict[str, Any]) -> str:
+    """
+    Genera un reporte detallado con análisis completo de cada función.
+
+    Args:
+        analisis_json: Diccionario con el análisis completo
+
+    Returns:
+        String con el reporte en markdown
+    """
+
+    # Extraer información
+    puesto = analisis_json['resultados'][0]['puesto']
+    validacion = analisis_json['resultados'][0]['validacion']
+    criterio_1 = validacion['criterios']['criterio_1_verbos']
+
+    # Limitar el JSON para el prompt (solo información esencial)
+    datos_compactos = {
+        "puesto": puesto,
+        "resultado_final": validacion['resultado'],
+        "criterios_aprobados": validacion['criterios_aprobados'],
+        "confianza": validacion['confianza'],
+        "criterio_1": {
+            "resultado": criterio_1['resultado'],
+            "aprobadas": criterio_1['funciones_aprobadas'],
+            "observadas": criterio_1['funciones_observadas'],
+            "rechazadas": criterio_1['funciones_rechazadas'],
+            "total": criterio_1['total_funciones'],
+            # Incluir solo primeras 3 funciones de cada categoría para no exceder tokens
+            "muestra_aprobadas": criterio_1['detalles']['aprobadas'][:3] if len(criterio_1['detalles']['aprobadas']) > 0 else [],
+            "muestra_observadas": criterio_1['detalles']['observadas'][:3] if len(criterio_1['detalles']['observadas']) > 0 else [],
+            "muestra_rechazadas": criterio_1['detalles']['rechazadas'][:3] if len(criterio_1['detalles']['rechazadas']) > 0 else []
+        },
+        "criterio_2": {
+            "resultado": validacion['criterios']['criterio_2_contextual']['resultado'],
+            "alineacion": validacion['criterios']['criterio_2_contextual']['alineacion']['clasificacion'],
+            "confianza": validacion['criterios']['criterio_2_contextual']['alineacion']['confianza'],
+            "razonamiento": validacion['criterios']['criterio_2_contextual']['razonamiento'][:500]  # Truncar
+        },
+        "criterio_3": {
+            "resultado": validacion['criterios']['criterio_3_impacto']['resultado'],
+            "metricas": validacion['criterios']['criterio_3_impacto']['metricas']
+        }
+    }
+
+    prompt = f"""Eres un auditor senior experto de la Administración Pública Federal (APF) de México.
+Tu tarea es generar un **REPORTE DETALLADO DE AUDITORÍA** en lenguaje profesional y técnico a partir del siguiente análisis de validación.
+
+**DATOS DEL ANÁLISIS:**
+```json
+{json.dumps(datos_compactos, indent=2, ensure_ascii=False)}
+```
+
+---
+
+**INSTRUCCIONES PARA EL REPORTE DETALLADO:**
+
+Genera un **REPORTE DE AUDITORÍA COMPLETO** en formato Markdown con las siguientes secciones:
+
+## 🔍 REPORTE DE AUDITORÍA DETALLADO - VALIDACIÓN DE PUESTO
+
+### 1. Identificación y Contexto
+- Datos completos del puesto
+- Contexto de la validación
+- Fecha y sistema utilizado
+
+### 2. Metodología de Validación
+Explica brevemente cómo funciona el sistema de validación:
+- Los 3 criterios evaluados
+- La matriz 2-of-3 para decisión final
+- Los umbrales utilizados
+
+### 3. Resultado Final
+- Decisión: APROBADO/RECHAZADO
+- Clasificación (si aplica)
+- Confianza global
+- Criterios que pasaron/fallaron
+
+### 4. Análisis Detallado por Criterio
+
+#### 4.1 Criterio 1: Análisis Semántico de Funciones
+
+**Objetivo del Criterio:**
+Explica qué evalúa este criterio (verbos apropiados, respaldo normativo, estructura, semántica, jerarquía)
+
+**Metodología:**
+- Cómo se evaluó cada función
+- Los 5 sub-criterios utilizados
+- El sistema de scoring (0.0 - 1.0)
+
+**Resultados Generales:**
+- Total de funciones analizadas
+- Distribución: aprobadas/observadas/rechazadas
+- Tasa crítica vs umbral (≤50%)
+- Decisión: PASS/FAIL
+
+**Análisis de Funciones Representativas:**
+
+Para cada categoría (aprobadas, observadas, rechazadas), analiza 1-2 ejemplos:
+- Función específica
+- Scores obtenidos
+- Razonamiento del sistema
+- Por qué fue clasificada así
+
+#### 4.2 Criterio 2: Validación Contextual
+
+**Objetivo del Criterio:**
+Validación mediante LLM de la alineación con normativa institucional
+
+**Resultados:**
+- Nivel de alineación: ALIGNED/PARTIALLY_ALIGNED/NOT_ALIGNED
+- Confianza del LLM
+- Razonamiento completo
+- Evidencias normativas utilizadas (si disponibles)
+
+**Interpretación:**
+Explica qué significa este resultado y por qué el criterio PASÓ/FALLÓ
+
+#### 4.3 Criterio 3: Impacto Jerárquico
+
+**Objetivo del Criterio:**
+Coherencia entre el impacto de las funciones y el nivel salarial del puesto
+
+**Resultados:**
+- Métricas de impacto
+- Funciones con discrepancias
+- Tasa crítica vs umbral
+- Decisión: PASS/FAIL
+
+**Interpretación:**
+Análisis de coherencia jerárquica
+
+### 5. Aplicación de la Matriz 2-of-3
+
+Explica cómo se llegó a la decisión final:
+- Criterios que pasaron: X/3
+- Lógica de decisión aplicada
+- Por qué el resultado es APROBADO o RECHAZADO
+
+### 6. Evidencias y Trazabilidad
+
+Resume las evidencias clave utilizadas:
+- Fragmentos normativos consultados
+- Documentos de referencia
+- Nivel de confianza en evidencias
+
+### 7. Conclusiones y Recomendaciones
+
+**Conclusión Principal:**
+Declaración clara de la decisión y su justificación
+
+**Recomendaciones:**
+- Acciones requeridas (si las hay)
+- Áreas de atención
+- Sugerencias de mejora (si aplica)
+
+**Consideraciones Finales:**
+Observaciones importantes para la toma de decisiones
+
+---
+
+**ESTILO DEL REPORTE:**
+- Lenguaje técnico y profesional
+- Enfoque en explicar QUÉ se evaluó, CÓMO se evaluó, POR QUÉ se decidió así
+- Incluir datos específicos y métricas
+- Justificar cada decisión con evidencia
+- Ser exhaustivo pero organizado
+- Usar formato markdown con secciones claras
+"""
+
+    try:
+        response = completion(
+            model=LLM_CONFIG["model"],
+            messages=[{"role": "user", "content": prompt}],
+            temperature=LLM_CONFIG["temperature"],
+            max_tokens=LLM_CONFIG["max_tokens"]
+        )
+
+        reporte = response.choices[0].message.content
+
+        # Añadir metadatos
+        header = f"""# 📋 REPORTE DE AUDITORÍA COMPLETO - ANÁLISIS DETALLADO
+
+**Generado por:** Sistema de Validación APF v5.28
+**Fecha de generación:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+**Tipo de reporte:** Análisis Detallado para Auditoría
+
+---
+
+"""
+
+        return header + reporte
+
+    except Exception as e:
+        return f"❌ Error al generar reporte detallado: {str(e)}"
+
+
+def humanize_report(
+    analisis_json_path: str,
+    mode: Literal["simplificado", "detallado"] = "simplificado"
+) -> str:
+    """
+    Función principal para humanizar un reporte JSON.
+
+    Args:
+        analisis_json_path: Ruta al archivo JSON de análisis
+        mode: Modo de reporte ("simplificado" o "detallado")
+
+    Returns:
+        String con el reporte humanizado en markdown
+    """
+
+    try:
+        # Leer JSON
+        with open(analisis_json_path, 'r', encoding='utf-8') as f:
+            analisis_json = json.load(f)
+
+        # Validar que tenga resultados
+        if 'resultados' not in analisis_json or len(analisis_json['resultados']) == 0:
+            return "❌ Error: El JSON no contiene resultados de análisis"
+
+        # Generar reporte según modo
+        if mode == "simplificado":
+            return generate_simplified_report(analisis_json)
+        else:
+            return generate_detailed_report(analisis_json)
+
+    except FileNotFoundError:
+        return f"❌ Error: No se encontró el archivo {analisis_json_path}"
+    except json.JSONDecodeError:
+        return "❌ Error: El archivo no es un JSON válido"
+    except Exception as e:
+        return f"❌ Error inesperado: {str(e)}"
+
+
+# Testing
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Uso: python report_humanizer.py <ruta_json> [simplificado|detallado]")
+        sys.exit(1)
+
+    json_path = sys.argv[1]
+    mode = sys.argv[2] if len(sys.argv) > 2 else "simplificado"
+
+    print(f"\n🔄 Generando reporte {mode}...")
+    reporte = humanize_report(json_path, mode)
+    print(reporte)

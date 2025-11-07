@@ -9,6 +9,11 @@ from pathlib import Path
 from datetime import datetime
 import plotly.graph_objects as go
 import plotly.express as px
+import sys
+
+# Añadir directorio src al path para importar módulos
+sys.path.append(str(Path(__file__).parent.parent.parent))
+from src.utils.report_humanizer import humanize_report
 
 def show():
     st.title("📊 Resultados Detallados de Análisis")
@@ -242,6 +247,59 @@ def show():
             file_name=f"resultados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv"
         )
+
+    # SECCIÓN 3.5: Humanización de Reportes con LLM
+    st.markdown("---")
+    st.markdown("## 🤖 Generar Reporte Humanizado")
+    st.markdown("Convierte el análisis técnico a lenguaje natural comprensible para auditoría y revisión humana.")
+
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        modo_reporte = st.selectbox(
+            "Selecciona el tipo de reporte:",
+            options=["simplificado", "detallado"],
+            format_func=lambda x: "📋 Resumen Ejecutivo (1-2 páginas)" if x == "simplificado" else "📊 Análisis Completo para Auditoría",
+            help="Simplificado: Resumen breve para decisiones rápidas. Detallado: Análisis exhaustivo con evidencias."
+        )
+
+    with col2:
+        generar_btn = st.button("🚀 Generar Reporte", type="primary", use_container_width=True)
+
+    with col3:
+        if 'reporte_humanizado' in st.session_state:
+            st.download_button(
+                label="💾 Descargar MD",
+                data=st.session_state['reporte_humanizado'],
+                file_name=f"reporte_{modo_reporte}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
+
+    if generar_btn:
+        with st.spinner(f"🤖 Generando reporte {modo_reporte}... (esto puede tomar 10-30 segundos)"):
+            try:
+                # Generar reporte usando LLM
+                reporte = humanize_report(str(selected_file), modo_reporte)
+
+                # Guardar en session_state para descargar
+                st.session_state['reporte_humanizado'] = reporte
+
+                # Mostrar reporte
+                st.success(f"✅ Reporte {modo_reporte} generado exitosamente!")
+                st.markdown("### 📄 Vista Previa del Reporte")
+
+                # Mostrar en expander para no ocupar mucho espacio
+                with st.expander("📖 Ver reporte completo", expanded=True):
+                    st.markdown(reporte)
+
+            except Exception as e:
+                st.error(f"❌ Error al generar reporte: {str(e)}")
+                st.exception(e)
+
+    # Mostrar reporte previo si existe
+    elif 'reporte_humanizado' in st.session_state:
+        st.info("💡 Hay un reporte generado previamente. Usa el botón 'Descargar MD' o genera uno nuevo.")
 
     # SECCIÓN 4: Análisis Detallado de Puestos
     st.markdown("---")
