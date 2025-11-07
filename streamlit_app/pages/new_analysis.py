@@ -104,54 +104,122 @@ def step_1_upload_files():
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("#### 📊 Base de Datos Sidegor (Requerido)")
-        st.markdown("Formato: archivo Excel (.xlsx)")
+        # Mostrar uploader según el modo seleccionado
+        if input_mode == 'excel':
+            st.markdown("#### 📊 Base de Datos Sidegor (Requerido)")
+            st.markdown("Formato: archivo Excel (.xlsx)")
 
-        uploaded_sidegor = st.file_uploader(
-            "Subir archivo Excel Sidegor",
-            type=['xlsx'],
-            key='sidegor_uploader',
-            help="Archivo Excel con formato Sidegor (11 hojas: PUESTOS, OBJ_FUNCIONES, etc.)"
-        )
+            uploaded_sidegor = st.file_uploader(
+                "Subir archivo Excel Sidegor",
+                type=['xlsx'],
+                key='sidegor_uploader',
+                help="Archivo Excel con formato Sidegor (11 hojas: PUESTOS, OBJ_FUNCIONES, etc.)"
+            )
 
-        if uploaded_sidegor is not None:
-            st.session_state.uploaded_sidegor = uploaded_sidegor
+            if uploaded_sidegor is not None:
+                st.session_state.uploaded_sidegor = uploaded_sidegor
 
-            # Validar archivo
-            with st.spinner("Validando archivo..."):
-                try:
-                    # Leer hojas del Excel
-                    excel_file = pd.ExcelFile(uploaded_sidegor)
-                    sheets = excel_file.sheet_names
+                # Validar archivo
+                with st.spinner("Validando archivo..."):
+                    try:
+                        # Leer hojas del Excel
+                        excel_file = pd.ExcelFile(uploaded_sidegor)
+                        sheets = excel_file.sheet_names
 
-                    # Verificar hojas requeridas
-                    required_sheets = ['PUESTOS', 'OBJ_FUNCIONES']
-                    has_required = all(sheet in sheets for sheet in required_sheets)
+                        # Verificar hojas requeridas
+                        required_sheets = ['PUESTOS', 'OBJ_FUNCIONES']
+                        has_required = all(sheet in sheets for sheet in required_sheets)
 
-                    if has_required:
-                        # Contar puestos
-                        df_puestos = pd.read_excel(uploaded_sidegor, sheet_name='PUESTOS')
-                        num_puestos = len(df_puestos)
+                        if has_required:
+                            # Contar puestos
+                            df_puestos = pd.read_excel(uploaded_sidegor, sheet_name='PUESTOS')
+                            num_puestos = len(df_puestos)
 
-                        st.success(f"✅ Archivo válido")
+                            st.success(f"✅ Archivo válido")
+                            st.info(f"""
+                            **Información del archivo:**
+                            - 📦 Tamaño: {uploaded_sidegor.size / 1024:.1f} KB
+                            - 📋 Puestos detectados: **{num_puestos}**
+                            - 📄 Hojas encontradas: {len(sheets)}
+                            """)
+
+                            # Guardar info en session state
+                            st.session_state.sidegor_info = {
+                                'num_puestos': num_puestos,
+                                'sheets': sheets,
+                                'df_puestos': df_puestos
+                            }
+                        else:
+                            st.error(f"❌ Formato inválido. Faltan hojas requeridas: {', '.join(required_sheets)}")
+
+                    except Exception as e:
+                        st.error(f"❌ Error al leer archivo: {str(e)}")
+
+        else:  # modo 'txt'
+            st.markdown("#### 📝 Descripción de Puesto (Texto Plano)")
+            st.markdown("Formato: archivo .txt con descripción del puesto")
+
+            uploaded_puesto_txt = st.file_uploader(
+                "Subir documento de puesto (.txt)",
+                type=['txt'],
+                key='puesto_txt_uploader',
+                help="Documento de texto plano con la descripción completa del puesto"
+            )
+
+            if uploaded_puesto_txt is not None:
+                st.session_state.uploaded_puesto_txt = uploaded_puesto_txt
+
+                # Parsear documento con LLM
+                with st.spinner("🤖 Extrayendo información del documento con LLM..."):
+                    try:
+                        # Leer contenido del archivo
+                        content = uploaded_puesto_txt.getvalue().decode('utf-8')
+
+                        # Parsear usando LLM
+                        puesto_data = parse_and_convert(content)
+
+                        # Guardar datos parseados en session state
+                        st.session_state.parsed_puesto_data = puesto_data
+
+                        # Mostrar información extraída
+                        st.success("✅ Documento parseado exitosamente")
+
+                        puesto_info = puesto_data.get('puesto', {})
+                        funciones = puesto_data.get('funciones', [])
+                        metadatos = puesto_data.get('metadatos', {})
+
                         st.info(f"""
-                        **Información del archivo:**
-                        - 📦 Tamaño: {uploaded_sidegor.size / 1024:.1f} KB
-                        - 📋 Puestos detectados: **{num_puestos}**
-                        - 📄 Hojas encontradas: {len(sheets)}
+                        **Información Extraída:**
+                        - 📄 Código: **{puesto_info.get('codigo', 'N/A')}**
+                        - 🏷️ Denominación: **{puesto_info.get('denominacion', 'N/A')}**
+                        - 📊 Nivel: **{puesto_info.get('nivel_salarial', 'N/A')}**
+                        - 🏢 UR: **{puesto_info.get('unidad_responsable', 'N/A')}**
+                        - ✅ Funciones detectadas: **{len(funciones)}**
+                        - 🎯 Calidad extracción: **{metadatos.get('calidad_extraccion', 'N/A')}**
                         """)
 
-                        # Guardar info en session state
-                        st.session_state.sidegor_info = {
-                            'num_puestos': num_puestos,
-                            'sheets': sheets,
-                            'df_puestos': df_puestos
-                        }
-                    else:
-                        st.error(f"❌ Formato inválido. Faltan hojas requeridas: {', '.join(required_sheets)}")
+                        # Preview de funciones
+                        with st.expander("👁️ Preview de Funciones Extraídas"):
+                            for i, func in enumerate(funciones[:5], 1):  # Mostrar primeras 5
+                                st.markdown(f"""
+                                **{i}. {func.get('verbo_accion', 'N/A')}**
+                                - Descripción: {func.get('descripcion_completa', 'N/A')[:100]}...
+                                """)
 
-                except Exception as e:
-                    st.error(f"❌ Error al leer archivo: {str(e)}")
+                            if len(funciones) > 5:
+                                st.caption(f"... y {len(funciones) - 5} funciones más")
+
+                        # Preview del objetivo
+                        if puesto_data.get('objetivo'):
+                            with st.expander("🎯 Objetivo del Puesto"):
+                                st.markdown(puesto_data['objetivo'][:300] + "...")
+
+                    except Exception as e:
+                        st.error(f"❌ Error al parsear documento: {str(e)}")
+                        st.exception(e)
+                        # Limpiar datos parciales
+                        if 'parsed_puesto_data' in st.session_state:
+                            del st.session_state.parsed_puesto_data
 
     with col2:
         st.markdown("#### 📜 Normativa / Reglamento (Requerido)")
@@ -192,16 +260,27 @@ def step_1_upload_files():
             st.rerun()
 
     with col_right:
-        can_proceed = (st.session_state.uploaded_sidegor is not None and
-                       st.session_state.uploaded_normativa is not None)
+        # Validar requisitos según el modo seleccionado
+        if input_mode == 'excel':
+            can_proceed = (st.session_state.uploaded_sidegor is not None and
+                           st.session_state.uploaded_normativa is not None)
+            warning_msg = "⚠️ Por favor sube el archivo Sidegor y la normativa para continuar"
+        else:  # modo 'txt'
+            can_proceed = ('parsed_puesto_data' in st.session_state and
+                           st.session_state.uploaded_normativa is not None)
+            warning_msg = "⚠️ Por favor sube el documento de puesto (.txt) y la normativa para continuar"
 
         if st.button("Siguiente →", use_container_width=True,
                      type="primary", disabled=not can_proceed):
-            st.session_state.wizard_step = 2
+            # En modo txt, saltar directamente al paso 3 (no hay filtros para un solo puesto)
+            if input_mode == 'txt':
+                st.session_state.wizard_step = 3
+            else:
+                st.session_state.wizard_step = 2
             st.rerun()
 
     if not can_proceed:
-        st.warning("⚠️ Por favor sube ambos archivos para continuar")
+        st.warning(warning_msg)
 
 
 def step_2_configure_filters():
@@ -606,7 +685,44 @@ def execute_analysis():
 
         puestos_to_validate = []
 
-        if adapter:
+        # Si estamos en modo texto, usar datos parseados directamente
+        if st.session_state.input_mode == 'txt' and 'parsed_puesto_data' in st.session_state:
+            status_text.text("📝 Preparando puesto desde documento de texto...")
+
+            puesto_data = st.session_state.parsed_puesto_data
+            puesto_info = puesto_data.get('puesto', {})
+            funciones = puesto_data.get('funciones', [])
+
+            # Convertir al formato esperado por el validador
+            puesto_for_validator = {
+                "codigo": puesto_info.get('codigo', 'UNKNOWN'),
+                "denominacion": puesto_info.get('denominacion', ''),
+                "nivel_salarial": puesto_info.get('nivel_salarial', ''),
+                "unidad_responsable": puesto_info.get('unidad_responsable', ''),
+                "funciones": []
+            }
+
+            # Convertir funciones
+            for func in funciones:
+                puesto_for_validator["funciones"].append({
+                    "id": func.get('id', f"F{func.get('id', 'XX')}"),
+                    "descripcion_completa": func.get('descripcion_completa', ''),
+                    "que_hace": func.get('complemento', ''),  # Mapeo de campos
+                    "para_que_lo_hace": func.get('resultado', '')
+                })
+
+            puestos_to_validate = [puesto_for_validator]
+
+            st.success(f"✅ Puesto listo para validar: {puesto_info.get('denominacion', 'N/A')}")
+            st.info(f"""
+            📊 **Información del Puesto:**
+            - Código: {puesto_for_validator['codigo']}
+            - Denominación: {puesto_for_validator['denominacion']}
+            - Nivel: {puesto_for_validator['nivel_salarial']}
+            - Funciones: {len(puesto_for_validator['funciones'])}
+            """)
+
+        elif adapter:
             # Usar adaptador real
             try:
                 # Listar todos los códigos de puesto
