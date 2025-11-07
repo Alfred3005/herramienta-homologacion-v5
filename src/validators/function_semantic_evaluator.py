@@ -260,36 +260,26 @@ class FunctionSemanticEvaluator:
             contexto_normativo=contexto_normativo
         )
 
-        # Llamar a OpenAI
-        api_key = self.context.get_data('openai_api_key') or self.context.get_data('api_key')
+        # Preparar prompt completo (system + user)
+        system_instruction = "Eres un experto en evaluación de descripciones de puestos de la Administración Pública Federal mexicana. Respondes únicamente en JSON válido."
+        full_prompt = f"{system_instruction}\n\n{prompt}"
 
+        # Llamar a OpenAI
         response = robust_openai_call(
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Eres un experto en evaluación de descripciones de puestos de la Administración Pública Federal mexicana. Respondes únicamente en JSON válido."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            model="gpt-4o",
+            prompt=full_prompt,
+            model="openai/gpt-4o",
             temperature=0.1,  # Baja temperatura para mayor consistencia
-            api_key=api_key,
+            max_tokens=1500,
             context=self.context
         )
 
-        # Parsear JSON de respuesta
-        response_text = response.choices[0].message.content.strip()
+        # Verificar estado de respuesta
+        if response.get("status") != "success":
+            error_msg = response.get("error", "Error desconocido en llamada LLM")
+            raise Exception(f"Error en evaluación LLM: {error_msg}")
 
-        # Extraer JSON si viene envuelto en markdown
-        if "```json" in response_text:
-            response_text = response_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in response_text:
-            response_text = response_text.split("```")[1].split("```")[0].strip()
-
-        return json.loads(response_text)
+        # Extraer datos (ya parseados como JSON)
+        return response["data"]
 
     def _create_evaluation_prompt(
         self,
