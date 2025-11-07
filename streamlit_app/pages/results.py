@@ -159,11 +159,11 @@ def show():
             st.metric("Criterio 1 - Tasa Crítica Prom.", f"{sum(c1_tasas)/len(c1_tasas):.0%}")
 
         with col2:
-            c2_confianzas = [r['validacion']['criterios']['criterio_2_contextual']['confianza'] for r in resultados]
+            c2_confianzas = [r['validacion']['criterios']['criterio_2_contextual']['alineacion']['confianza'] for r in resultados]
             st.metric("Criterio 2 - Confianza Prom.", f"{sum(c2_confianzas)/len(c2_confianzas):.2f}")
 
         with col3:
-            c3_tasas = [r['validacion']['criterios']['criterio_3_impacto']['tasa_critica'] for r in resultados]
+            c3_tasas = [r['validacion']['criterios']['criterio_3_impacto']['metricas']['tasa_critica'] for r in resultados]
             st.metric("Criterio 3 - Tasa Crítica Prom.", f"{sum(c3_tasas)/len(c3_tasas):.0%}")
 
     with tab3:
@@ -187,9 +187,9 @@ def show():
                 'C1 (Verbos)': c1['resultado'],
                 'C1 Tasa': f"{c1['tasa_critica']:.0%}",
                 'C2 (Context)': c2['resultado'],
-                'C2 Conf': f"{c2['confianza']:.2f}",
+                'C2 Conf': f"{c2['alineacion']['confianza']:.2f}",
                 'C3 (Impacto)': c3['resultado'],
-                'C3 Tasa': f"{c3['tasa_critica']:.0%}"
+                'C3 Tasa': f"{c3['metricas']['tasa_critica']:.0%}"
             })
 
         df_detalle = pd.DataFrame(tabla_data)
@@ -284,7 +284,7 @@ def show():
                 else:
                     st.error("❌ FAIL")
                 st.metric("Tasa Crítica", f"{c1_data['tasa_critica']:.0%}")
-                st.caption(f"Critical: {c1_data['funciones_critical']}/{c1_data['total_funciones']}")
+                st.caption(f"Rechazadas: {c1_data['funciones_rechazadas']}/{c1_data['total_funciones']}")
 
         with c2:
             c2_data = val['criterios']['criterio_2_contextual']
@@ -294,8 +294,8 @@ def show():
                     st.success("✅ PASS")
                 else:
                     st.error("❌ FAIL")
-                st.metric("Confianza", f"{c2_data['confianza']:.2f}")
-                st.caption(f"Alineación: {c2_data['alineacion']}")
+                st.metric("Confianza", f"{c2_data['alineacion']['confianza']:.2f}")
+                st.caption(f"Alineación: {c2_data['alineacion']['clasificacion']}")
 
         with c3:
             c3_data = val['criterios']['criterio_3_impacto']
@@ -305,8 +305,8 @@ def show():
                     st.success("✅ PASS")
                 else:
                     st.error("❌ FAIL")
-                st.metric("Tasa Crítica", f"{c3_data['tasa_critica']:.0%}")
-                st.caption(f"Critical: {c3_data.get('funciones_critical', 0)}")
+                st.metric("Tasa Crítica", f"{c3_data['metricas']['tasa_critica']:.0%}")
+                st.caption(f"Critical: {c3_data['metricas'].get('funciones_critical', 0)}")
 
         # Razonamiento
         with st.expander("📝 Ver Razonamiento Detallado"):
