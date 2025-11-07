@@ -571,31 +571,68 @@ def step_4_execute():
     st.markdown("### ✅ Resumen de Configuración")
 
     with st.container():
-        st.markdown(f"""
-        **📊 Archivo Sidegor:**
-        - Nombre: {st.session_state.uploaded_sidegor.name}
-        - Tamaño: {st.session_state.uploaded_sidegor.size / 1024:.1f} KB
-        - Total puestos: {st.session_state.sidegor_info['num_puestos']}
+        # Modo de entrada
+        input_mode = st.session_state.input_mode
 
-        **📜 Normativa:**
-        - Nombre: {st.session_state.uploaded_normativa.name}
-        - Tamaño: {st.session_state.uploaded_normativa.size / 1024:.1f} KB
+        if input_mode == 'excel':
+            # Resumen modo Excel
+            st.markdown(f"""
+            **🔀 Modo:** Base de Datos Excel (Sidegor)
 
-        **🔍 Filtros Aplicados:**
-        - Niveles: {', '.join(st.session_state.filters_config.get('niveles', ['Ninguno']))}
-        - UR: {st.session_state.filters_config.get('ur', 'Ninguna')}
-        - Código: {st.session_state.filters_config.get('codigo_pattern', 'Ninguno')}
+            **📊 Archivo Sidegor:**
+            - Nombre: {st.session_state.uploaded_sidegor.name}
+            - Tamaño: {st.session_state.uploaded_sidegor.size / 1024:.1f} KB
+            - Total puestos: {st.session_state.sidegor_info['num_puestos']}
 
-        **🎯 Puestos a Procesar:** {st.session_state.filters_config.get('num_puestos_filtrados', 0)}
+            **📜 Normativa:**
+            - Nombre: {st.session_state.uploaded_normativa.name}
+            - Tamaño: {st.session_state.uploaded_normativa.size / 1024:.1f} KB
 
-        **⚙️ Opciones:**
-        - Validación contextual: {'✅ Sí' if st.session_state.analysis_options.get('contextual_validation') else '❌ No'}
-        - Análisis verbos débiles: {'✅ Sí' if st.session_state.analysis_options.get('weak_verbs_analysis') else '❌ No'}
-        - Generar PDF: {'✅ Sí' if st.session_state.analysis_options.get('generate_pdf') else '❌ No'}
-        - Generar Excel: {'✅ Sí' if st.session_state.analysis_options.get('generate_excel') else '❌ No'}
+            **🔍 Filtros Aplicados:**
+            - Niveles: {', '.join(st.session_state.filters_config.get('niveles', ['Ninguno']))}
+            - UR: {st.session_state.filters_config.get('ur', 'Ninguna')}
+            - Código: {st.session_state.filters_config.get('codigo_pattern', 'Ninguno')}
 
-        **⏱️ Tiempo Estimado:** ~{st.session_state.filters_config.get('num_puestos_filtrados', 0) * 0.5:.1f} minutos
-        """)
+            **🎯 Puestos a Procesar:** {st.session_state.filters_config.get('num_puestos_filtrados', 0)}
+
+            **⚙️ Opciones:**
+            - Validación contextual: {'✅ Sí' if st.session_state.analysis_options.get('contextual_validation') else '❌ No'}
+            - Análisis verbos débiles: {'✅ Sí' if st.session_state.analysis_options.get('weak_verbs_analysis') else '❌ No'}
+            - Generar PDF: {'✅ Sí' if st.session_state.analysis_options.get('generate_pdf') else '❌ No'}
+            - Generar Excel: {'✅ Sí' if st.session_state.analysis_options.get('generate_excel') else '❌ No'}
+
+            **⏱️ Tiempo Estimado:** ~{st.session_state.filters_config.get('num_puestos_filtrados', 0) * 0.5:.1f} minutos
+            """)
+        else:  # modo 'txt'
+            # Resumen modo texto
+            puesto_data = st.session_state.parsed_puesto_data
+            puesto_info = puesto_data.get('puesto', {})
+            funciones = puesto_data.get('funciones', [])
+
+            st.markdown(f"""
+            **🔀 Modo:** Puesto Individual (Texto Plano)
+
+            **📝 Puesto a Analizar:**
+            - Código: {puesto_info.get('codigo', 'N/A')}
+            - Denominación: {puesto_info.get('denominacion', 'N/A')}
+            - Nivel: {puesto_info.get('nivel_salarial', 'N/A')}
+            - Unidad Responsable: {puesto_info.get('unidad_responsable', 'N/A')}
+            - Funciones: {len(funciones)}
+
+            **📜 Normativa:**
+            - Nombre: {st.session_state.uploaded_normativa.name}
+            - Tamaño: {st.session_state.uploaded_normativa.size / 1024:.1f} KB
+
+            **🎯 Puestos a Procesar:** 1 (modo individual)
+
+            **⚙️ Opciones:**
+            - Validación contextual: {'✅ Sí' if st.session_state.analysis_options.get('contextual_validation') else '❌ No'}
+            - Análisis verbos débiles: {'✅ Sí' if st.session_state.analysis_options.get('weak_verbs_analysis') else '❌ No'}
+            - Generar PDF: {'✅ Sí' if st.session_state.analysis_options.get('generate_pdf') else '❌ No'}
+            - Generar Excel: {'✅ Sí' if st.session_state.analysis_options.get('generate_excel') else '❌ No'}
+
+            **⏱️ Tiempo Estimado:** ~0.5 minutos
+            """)
 
     st.markdown("---")
 
@@ -615,16 +652,23 @@ def step_4_execute():
 def execute_analysis():
     """Ejecuta el análisis con la configuración guardada"""
 
-    # Verificar que tenemos archivos cargados
-    if st.session_state.uploaded_sidegor is None:
-        st.error("❌ No se ha cargado el archivo Sidegor")
-        return
+    # Verificar archivos según modo de entrada
+    input_mode = st.session_state.input_mode
+
+    if input_mode == 'excel':
+        if st.session_state.uploaded_sidegor is None:
+            st.error("❌ No se ha cargado el archivo Sidegor")
+            return
+    else:  # modo 'txt'
+        if 'parsed_puesto_data' not in st.session_state:
+            st.error("❌ No se ha parseado el documento de puesto")
+            return
 
     if st.session_state.uploaded_normativa is None:
         st.error("❌ No se ha cargado el archivo de normativa")
         return
 
-    st.info("🔄 Iniciando análisis con sistema de validación v5.0...")
+    st.info("🔄 Iniciando análisis con sistema de validación v5.30...")
 
     try:
         # Importar validador
@@ -650,34 +694,39 @@ def execute_analysis():
         # Dividir en fragmentos (simplificado - por párrafos)
         normativa_fragments = [p.strip() for p in normativa_text.split('\n\n') if p.strip()]
 
-        # Paso 2: Cargar adaptador Sidegor
-        status_text.text("📊 Cargando archivo Sidegor...")
-        progress_bar.progress(20)
-
+        # Paso 2: Cargar adaptador Sidegor (solo en modo Excel)
         adapter = None
         temp_file_path = None
 
-        try:
-            # SidegorAdapter necesita ruta de archivo, no objeto de archivo
-            # Guardar temporalmente el archivo subido
-            import tempfile
+        if input_mode == 'excel':
+            status_text.text("📊 Cargando archivo Sidegor...")
+            progress_bar.progress(20)
 
-            with tempfile.NamedTemporaryFile(mode='wb', suffix='.xlsx', delete=False) as tmp_file:
-                st.session_state.uploaded_sidegor.seek(0)
-                tmp_file.write(st.session_state.uploaded_sidegor.read())
-                temp_file_path = tmp_file.name
+            try:
+                # SidegorAdapter necesita ruta de archivo, no objeto de archivo
+                # Guardar temporalmente el archivo subido
+                import tempfile
 
-            # Crear adaptador e intentar cargar
-            adapter = SidegorAdapter()
-            if adapter.cargar_archivo(temp_file_path):
-                st.success("✅ Archivo Sidegor cargado correctamente")
-            else:
-                st.warning("⚠️ Error al cargar Sidegor con adapter")
+                with tempfile.NamedTemporaryFile(mode='wb', suffix='.xlsx', delete=False) as tmp_file:
+                    st.session_state.uploaded_sidegor.seek(0)
+                    tmp_file.write(st.session_state.uploaded_sidegor.read())
+                    temp_file_path = tmp_file.name
+
+                # Crear adaptador e intentar cargar
+                adapter = SidegorAdapter()
+                if adapter.cargar_archivo(temp_file_path):
+                    st.success("✅ Archivo Sidegor cargado correctamente")
+                else:
+                    st.warning("⚠️ Error al cargar Sidegor con adapter")
+                    adapter = None
+            except Exception as e:
+                st.error(f"❌ Error al cargar Sidegor: {str(e)}")
+                st.info("Usando modo de prueba con datos del session state...")
                 adapter = None
-        except Exception as e:
-            st.error(f"❌ Error al cargar Sidegor: {str(e)}")
-            st.info("Usando modo de prueba con datos del session state...")
-            adapter = None
+        else:
+            # En modo texto, no necesitamos adaptador
+            status_text.text("📝 Modo texto: Saltando carga de Sidegor...")
+            progress_bar.progress(20)
 
         # Paso 3: Extraer puestos a validar
         status_text.text("🔍 Aplicando filtros y extrayendo puestos...")
