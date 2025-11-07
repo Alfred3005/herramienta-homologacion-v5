@@ -20,6 +20,7 @@ from src.validators.criterion_3_validator import Criterion3Validator
 from src.validators.contextual_verb_validator import ContextualVerbValidator
 from src.validators.verb_semantic_analyzer import VerbSemanticAnalyzer
 from src.validators.shared_utilities import APFContext
+from src.validators.in_memory_normativa_adapter import create_loader_from_fragments
 from src.validators.models import (
     Criterion1Result,
     Criterion2Result,
@@ -60,9 +61,28 @@ class IntegratedValidator:
             self.context.set_data('openai_api_key', openai_api_key, 'IntegratedValidator')
             self.context.set_data('api_key', openai_api_key, 'IntegratedValidator')
 
+        # Crear NormativaLoader en memoria si hay fragmentos
+        normativa_loader = None
+        if normativa_fragments:
+            try:
+                logger.info(f"[IntegratedValidator] Creando NormativaLoader con {len(normativa_fragments)} fragmentos")
+                normativa_loader = create_loader_from_fragments(
+                    text_fragments=normativa_fragments,
+                    document_title="Reglamento Interior",
+                    use_embeddings=False,  # Deshabilitado por ahora para rapidez
+                    context=self.context
+                )
+                logger.info("[IntegratedValidator] NormativaLoader creado exitosamente")
+            except Exception as e:
+                logger.error(f"[IntegratedValidator] Error creando NormativaLoader: {e}")
+                normativa_loader = None
+
         # Inicializar validadores LLM de v4
         self.verb_analyzer = VerbSemanticAnalyzer(context=self.context)
-        self.contextual_validator = ContextualVerbValidator(context=self.context)
+        self.contextual_validator = ContextualVerbValidator(
+            normativa_loader=normativa_loader,
+            context=self.context
+        )
 
         # Inicializar Criterion3Validator (ya existente en v5)
         self.criterion3_validator = Criterion3Validator(
