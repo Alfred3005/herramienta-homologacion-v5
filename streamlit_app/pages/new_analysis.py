@@ -20,6 +20,9 @@ load_dotenv(override=True)
 root_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(root_dir))
 
+# Importar parser de texto
+from src.utils.text_puesto_parser import parse_and_convert
+
 def show():
     """Renderiza la página de nuevo análisis"""
 
@@ -35,6 +38,12 @@ def show():
 
     if 'uploaded_normativa' not in st.session_state:
         st.session_state.uploaded_normativa = None
+
+    if 'uploaded_puesto_txt' not in st.session_state:
+        st.session_state.uploaded_puesto_txt = None
+
+    if 'input_mode' not in st.session_state:
+        st.session_state.input_mode = 'excel'  # 'excel' o 'txt'
 
     if 'filters_config' not in st.session_state:
         st.session_state.filters_config = {}
@@ -78,6 +87,19 @@ def step_1_upload_files():
     """Paso 1: Subir archivos necesarios"""
 
     st.subheader("📂 Paso 1: Subir Archivos")
+
+    # Selector de modo de entrada
+    st.markdown("#### 🔀 Modo de Entrada")
+    input_mode = st.radio(
+        "Selecciona el tipo de entrada:",
+        options=['excel', 'txt'],
+        format_func=lambda x: "📊 Base de Datos Excel (Sidegor)" if x == 'excel' else "📝 Puesto Individual (Texto Plano)",
+        horizontal=True,
+        key='input_mode_selector'
+    )
+
+    st.session_state.input_mode = input_mode
+    st.markdown("---")
 
     col1, col2 = st.columns(2)
 
