@@ -81,16 +81,18 @@ class WeakVerbAnalysis:
 
 @dataclass
 class Criterion1Result:
-    """Resultado de Criterio 1: Congruencia de Verbos Débiles"""
+    """Resultado de Criterio 1: Congruencia de Verbos Débiles / Análisis Semántico (v5.20+)"""
     criterion_name: str = "CONGRUENCIA_VERBOS"
     result: ValidationResult = ValidationResult.PASS
 
     total_functions: int = 0
     functions_with_weak_verbs: int = 0
-    functions_critical: int = 0  # Sin respaldo
-    functions_moderate: int = 0  # Con respaldo
+    functions_critical: int = 0  # Sin respaldo / RECHAZADAS
+    functions_moderate: int = 0  # Con respaldo / OBSERVACIONES
+    functions_approved: int = 0  # APROBADAS (v5.20+)
 
     critical_rate: float = 0.0
+    approval_rate: float = 0.0  # Tasa de aprobación (v5.20+)
     threshold: float = 0.50
 
     weak_verb_analyses: List[WeakVerbAnalysis] = field(default_factory=list)
@@ -99,6 +101,7 @@ class Criterion1Result:
 
     confidence: float = 0.0
     reasoning: str = ""
+    details: Optional[Dict[str, Any]] = None  # Detalles adicionales (evaluaciones LLM, etc.)
 
 
 # ==========================================

@@ -19,6 +19,7 @@ from dataclasses import dataclass, asdict
 from src.validators.criterion_3_validator import Criterion3Validator
 from src.validators.contextual_verb_validator import ContextualVerbValidator
 from src.validators.verb_semantic_analyzer import VerbSemanticAnalyzer
+from src.validators.function_semantic_evaluator import FunctionSemanticEvaluator
 from src.validators.shared_utilities import APFContext
 from src.validators.in_memory_normativa_adapter import create_loader_from_fragments
 from src.validators.models import (
@@ -84,13 +85,19 @@ class IntegratedValidator:
             context=self.context
         )
 
+        # Inicializar FunctionSemanticEvaluator v5.20 (Protocolo SABG)
+        self.function_evaluator = FunctionSemanticEvaluator(
+            normativa_loader=self.normativa_loader,
+            context=self.context
+        )
+
         # Inicializar Criterion3Validator (ya existente en v5)
         self.criterion3_validator = Criterion3Validator(
             normativa_fragments=normativa_fragments,
             threshold=0.50
         )
 
-        logger.info("[IntegratedValidator] Inicializado con validadores LLM v4")
+        logger.info("[IntegratedValidator] Inicializado con validadores LLM v4 + FunctionEvaluator v5.20")
 
     def validate_puesto(
         self,
@@ -119,7 +126,7 @@ class IntegratedValidator:
         logger.info(f"[IntegratedValidator] Validando puesto {codigo}")
 
         # Ejecutar 3 criterios CON LLM
-        criterion_1 = self._validate_criterion_1(codigo, funciones, nivel)
+        criterion_1 = self._validate_criterion_1(codigo, funciones, nivel, puesto_data)
         criterion_2 = self._validate_criterion_2(codigo, puesto_data)
         criterion_3 = self.criterion3_validator.validate(
             puesto_codigo=codigo,
@@ -163,86 +170,109 @@ class IntegratedValidator:
         self,
         codigo: str,
         funciones: List[Dict[str, Any]],
-        nivel_salarial: str = "P"
+        nivel_salarial: str = "P",
+        puesto_data: Optional[Dict[str, Any]] = None
     ) -> Criterion1Result:
         """
-        Valida Criterio 1: Congruencia de Verbos Débiles.
+        Criterio 1 v5.20: Análisis Semántico Contextual con LLM (Protocolo SABG).
 
-        VERSIÓN LLM: Usa VerbSemanticAnalyzer de v4 con análisis LLM real.
+        Evalúa cada función usando 5 criterios:
+        1. Verbo (25%) - ¿Autorizado para el nivel?
+        2. Normativa (25%) - ¿Respaldo en reglamento?
+        3. Estructura (20%) - ¿VERBO+COMPLEMENTO+RESULTADO?
+        4. Semántica (20%) - ¿Alineación significado función vs normativa?
+        5. Jerárquica (10%) - ¿Corresponde al nivel del puesto?
 
         Args:
             codigo: Código del puesto
-            funciones: Lista de funciones
-            nivel_salarial: Nivel jerárquico del puesto
+            funciones: Lista de funciones del puesto
+            nivel_salarial: Nivel jerárquico (G11, H, J, K, etc.)
+            puesto_data: Datos completos del puesto (denominación, unidad, etc.)
 
         Returns:
-            Criterion1Result
+            Criterion1Result con evaluación semántica completa
         """
-        logger.info(f"[Criterio 1 LLM] Validando puesto {codigo} (nivel {nivel_salarial})")
+        logger.info(f"[Criterio 1 v5.20 SABG] Análisis semántico de {len(funciones)} funciones")
+
+        # Extraer información del puesto
+        puesto_nombre = puesto_data.get("denominacion", "") if puesto_data else ""
+        unidad = puesto_data.get("unidad_responsable", "") if puesto_data else ""
 
         total_functions = len(funciones)
-        critical_count = 0
-        moderate_count = 0
-        weak_verbs_detected = []
+        aprobadas = []
+        observadas = []
+        rechazadas = []
 
-        # Analizar cada función con LLM
-        for func in funciones:
-            verbo = func.get("verbo_accion", "").strip()
-            if not verbo:
-                # Fallback: extraer primer verbo de descripción
-                desc = func.get("descripcion_completa", "") or func.get("que_hace", "")
-                if desc:
-                    verbo = desc.split()[0] if desc.split() else ""
+        # Evaluar cada función con FunctionSemanticEvaluator
+        for idx, func in enumerate(funciones, 1):
+            try:
+                # Obtener texto completo de la función
+                funcion_text = func.get("descripcion_completa", "") or func.get("que_hace", "")
+                verbo = func.get("verbo_accion", "").strip()
 
-            if verbo:
-                try:
-                    # Buscar contexto normativo para el verbo
-                    normativa_context = self._get_verb_normativa_context(verbo)
+                # Fallback: extraer primer verbo si no está explícito
+                if not verbo and funcion_text:
+                    verbo = funcion_text.split()[0] if funcion_text.split() else "DESCONOCIDO"
 
-                    # Llamar a verb_analyzer con LLM y contexto normativo
-                    analysis = self.verb_analyzer.analyze_verb_for_level(
-                        verb=verbo,
-                        nivel_jerarquico=nivel_salarial[0] if nivel_salarial else "P",
-                        normativa_context=normativa_context
-                    )
+                # Evaluar función completa con 5 criterios LLM
+                evaluation = self.function_evaluator.evaluate_function(
+                    funcion_text=funcion_text,
+                    verbo=verbo,
+                    nivel_jerarquico=nivel_salarial[0] if nivel_salarial else "P",
+                    puesto_nombre=puesto_nombre,
+                    unidad=unidad
+                )
 
-                    # Contar según severidad
-                    # Nota: VerbAnalysisResult usa 'is_weak' no 'is_weak_verb'
-                    if analysis.is_weak:
-                        weak_verbs_detected.append(verbo)
-                        # Si tiene respaldo normativo, es MODERATE, sino CRITICAL
-                        # Verificar si viene de normativa o tiene confianza alta y es apropiado
-                        if (analysis.source == "normativa" or
-                            (analysis.is_appropriate and analysis.confidence > 0.7)):
-                            moderate_count += 1
-                        else:
-                            critical_count += 1
+                # Clasificar según resultado
+                if evaluation.clasificacion == "APROBADO":
+                    aprobadas.append(evaluation)
+                    logger.debug(f"   Función {idx}: APROBADO (score={evaluation.score_global:.2f})")
+                elif evaluation.clasificacion == "OBSERVACION":
+                    observadas.append(evaluation)
+                    logger.debug(f"   Función {idx}: OBSERVACION (score={evaluation.score_global:.2f})")
+                else:  # RECHAZADO
+                    rechazadas.append(evaluation)
+                    logger.warning(f"   Función {idx}: RECHAZADO (score={evaluation.score_global:.2f}) - {verbo}")
 
-                except Exception as e:
-                    logger.warning(f"[Criterio 1 LLM] Error analizando verbo '{verbo}': {e}")
-                    # Fallback: asumir verbo débil crítico
-                    critical_count += 1
-                    weak_verbs_detected.append(verbo)
+            except Exception as e:
+                logger.error(f"[Criterio 1 v5.20] Error evaluando función {idx}: {e}")
+                # Fallback: clasificar como RECHAZADO
+                rechazadas.append(None)  # Placeholder para contar
 
-        # Calcular tasa de fallo (solo CRITICAL cuenta)
-        critical_rate = critical_count / total_functions if total_functions > 0 else 0.0
-        is_passing = critical_rate <= 0.50  # Umbral del 50%
+        # Calcular tasas
+        tasa_aprobadas = len(aprobadas) / total_functions if total_functions > 0 else 0.0
+        tasa_rechazadas = len(rechazadas) / total_functions if total_functions > 0 else 0.0
+
+        # Decisión: PASS si >= 50% aprobadas (Protocolo SABG v1.1 - Umbral Permisivo)
+        is_passing = tasa_aprobadas >= 0.50
 
         logger.info(
-            f"[Criterio 1 LLM] Verbos débiles: {len(weak_verbs_detected)}, "
-            f"CRITICAL: {critical_count}, MODERATE: {moderate_count}, "
-            f"Tasa crítica: {critical_rate:.0%} ({'PASS' if is_passing else 'FAIL'})"
+            f"[Criterio 1 v5.20 SABG] Aprobadas: {len(aprobadas)} ({tasa_aprobadas:.0%}), "
+            f"Observadas: {len(observadas)} ({len(observadas)/total_functions:.0%}), "
+            f"Rechazadas: {len(rechazadas)} ({tasa_rechazadas:.0%}) → "
+            f"{'PASS' if is_passing else 'FAIL'}"
         )
 
         return Criterion1Result(
             result=ValidationResult.PASS if is_passing else ValidationResult.FAIL,
             total_functions=total_functions,
-            functions_critical=critical_count,
-            functions_moderate=moderate_count,
-            critical_rate=critical_rate,
-            confidence=0.90,  # Mayor confianza con LLM
-            reasoning=f"Análisis LLM: {critical_count} funciones CRÍTICAS de {total_functions} "
-                     f"({critical_rate:.0%}). Umbral: 50%"
+            functions_approved=len(aprobadas),
+            functions_moderate=len(observadas),
+            functions_critical=len(rechazadas),
+            approval_rate=tasa_aprobadas,
+            critical_rate=tasa_rechazadas,
+            threshold=0.50,
+            confidence=0.95,  # Alta confianza con análisis semántico LLM de 5 criterios
+            reasoning=(
+                f"Análisis semántico Protocolo SABG: {len(aprobadas)} aprobadas "
+                f"({tasa_aprobadas:.0%}), {len(rechazadas)} rechazadas ({tasa_rechazadas:.0%}). "
+                f"Umbral: 50% aprobadas."
+            ),
+            details={
+                "aprobadas": [e.to_dict() for e in aprobadas if e],
+                "observadas": [e.to_dict() for e in observadas if e],
+                "rechazadas": [e.to_dict() for e in rechazadas if e]
+            }
         )
 
     def _validate_criterion_2(
@@ -317,13 +347,17 @@ class IntegratedValidator:
             )
 
     def _format_criterion_1(self, criterion: Criterion1Result) -> Dict[str, Any]:
-        """Formatea resultado de Criterio 1 para JSON"""
+        """Formatea resultado de Criterio 1 para JSON (v5.20+)"""
         return {
             "resultado": criterion.result.value,
+            "tasa_aprobadas": round(criterion.approval_rate, 2),
             "tasa_critica": round(criterion.critical_rate, 2),
             "threshold": criterion.threshold,
-            "funciones_critical": criterion.functions_critical,
-            "total_funciones": criterion.total_functions
+            "funciones_aprobadas": criterion.functions_approved,
+            "funciones_observadas": criterion.functions_moderate,
+            "funciones_rechazadas": criterion.functions_critical,
+            "total_funciones": criterion.total_functions,
+            "metodo": "Análisis Semántico Protocolo SABG v1.1"
         }
 
     def _format_criterion_2(self, criterion: Criterion2Result) -> Dict[str, Any]:
