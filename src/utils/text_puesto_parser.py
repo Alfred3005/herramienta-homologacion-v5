@@ -17,7 +17,7 @@ from litellm import completion
 LLM_CONFIG = {
     "model": "openai/gpt-4o-mini",
     "temperature": 0.1,  # Determinístico para parsing
-    "max_tokens": 3000,
+    "max_tokens": 12000,  # Aumentado para soportar ~50+ funciones
 }
 
 
@@ -37,9 +37,11 @@ def parse_puesto_from_text(text_content: str) -> Dict[str, Any]:
 
 Tu tarea es extraer información estructurada de la siguiente descripción de puesto.
 
+**IMPORTANTE: Debes extraer TODAS las funciones del documento, sin importar cuántas sean.**
+
 **DOCUMENTO DEL PUESTO:**
 ```
-{text_content[:4000]}  # Limitar para no exceder tokens
+{text_content[:20000]}  # Aumentado para documentos extensos con 40+ funciones
 ```
 
 ---
@@ -53,7 +55,7 @@ Extrae la siguiente información del documento. Si algún campo no está present
 3. **Nivel Salarial**: Nivel jerárquico (ej: "G11", "H11", "J11", "K11")
 4. **Unidad Responsable**: Código de la unidad (ej: "0" si no se especifica)
 5. **Objetivo del Puesto**: Objetivo general o propósito del puesto (párrafo completo)
-6. **Funciones**: Lista de funciones del puesto. Cada función debe tener:
+6. **Funciones**: Lista de TODAS las funciones del puesto (extrae todas sin omitir ninguna). Cada función debe tener:
    - verbo_accion: El verbo principal (ej: "Emitir", "Dirigir", "Coordinar")
    - descripcion_completa: Texto completo de la función
    - complemento: Qué hace (objeto de la acción)
