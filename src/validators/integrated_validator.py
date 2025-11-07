@@ -74,6 +74,8 @@ class IntegratedValidator:
                     context=self.context
                 )
                 logger.info("[IntegratedValidator] NormativaLoader creado exitosamente")
+                logger.info(f"[IntegratedValidator] embedding_mode: {self.normativa_loader.embedding_mode}")
+                logger.info(f"[IntegratedValidator] semantic_search disponible: {hasattr(self.normativa_loader, 'semantic_search')}")
             except Exception as e:
                 logger.error(f"[IntegratedValidator] Error creando NormativaLoader: {e}")
                 self.normativa_loader = None

@@ -161,8 +161,7 @@ def create_loader_from_fragments(
         context=context
     )
 
-    # Inicializar embeddings si se solicita
-    if use_embeddings:
-        adapter.initialize_with_embeddings(use_embeddings=True)
+    # Inicializar embeddings (siempre, para configurar embedding_mode correctamente)
+    adapter.initialize_with_embeddings(use_embeddings=use_embeddings)
 
     return adapter.get_loader()
