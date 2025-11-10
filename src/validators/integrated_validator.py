@@ -140,8 +140,13 @@ class IntegratedValidator:
             normativa_text = None
             if self.normativa_loader and hasattr(self.normativa_loader, 'documents'):
                 # Concatenar primeros 3 documentos (limitar tamaño)
-                docs = self.normativa_loader.documents[:3]
-                normativa_text = "\n\n".join([doc.content[:1000] for doc in docs])
+                try:
+                    docs_list = list(self.normativa_loader.documents) if not isinstance(self.normativa_loader.documents, list) else self.normativa_loader.documents
+                    docs = docs_list[:3]
+                    normativa_text = "\n\n".join([doc.content[:1000] for doc in docs])
+                except Exception as doc_error:
+                    logger.warning(f"[IntegratedValidator] Error accediendo a documents: {doc_error}")
+                    normativa_text = None
 
             quality_result = self.quality_validator.validate_puesto_completo(
                 puesto_data=puesto_data,

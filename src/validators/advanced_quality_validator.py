@@ -88,30 +88,31 @@ class AdvancedQualityValidator:
         # Construir prompt inteligente
         prompt = self._build_analysis_prompt(puesto_data, normativa_text)
 
-        # Llamar a LLM con JSON mode
+        # Construir prompt completo con system message
+        full_prompt = """Eres un auditor experto de la Administración Pública Federal de México. Tu tarea es analizar puestos de trabajo y detectar problemas de calidad de manera exhaustiva y precisa.
+
+""" + prompt
+
+        # Llamar a LLM con robust_openai_call
         try:
             response = robust_openai_call(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Eres un auditor experto de la Administración Pública Federal de México. Tu tarea es analizar puestos de trabajo y detectar problemas de calidad de manera exhaustiva y precisa."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                model="gpt-4o",
+                prompt=full_prompt,
+                model="openai/gpt-4o",
                 temperature=0.1,  # Baja para consistencia
-                response_format={"type": "json_object"},
+                max_tokens=3000,  # Aumentar para respuesta JSON completa
                 context=self.context
             )
 
-            # Parsear respuesta
-            result_dict = json.loads(response.choices[0].message.content)
-
-            # Convertir a dataclass
-            return self._parse_llm_response(result_dict)
+            # Parsear respuesta de robust_openai_call
+            if response.get("status") == "success":
+                result_dict = response.get("data")
+                # Convertir a dataclass
+                return self._parse_llm_response(result_dict)
+            else:
+                # Error en la llamada LLM
+                error_msg = response.get("error", "Error desconocido")
+                logger.error(f"[AdvancedQualityValidator] Error en llamada LLM: {error_msg}")
+                raise Exception(f"Error en llamada LLM: {error_msg}")
 
         except Exception as e:
             logger.error(f"[AdvancedQualityValidator] Error en análisis: {e}")
@@ -289,6 +290,11 @@ Si NO encuentras problemas en alguna categoría, retorna arrays vacíos:
 - "problemas": []
 
 ════════════════════════════════════════════════════════════════════════════════
+
+**FORMATO DE SALIDA:**
+RETORNA ÚNICAMENTE UN OBJETO JSON VÁLIDO CON LA ESTRUCTURA ESPECIFICADA ARRIBA.
+NO incluyas texto adicional, comentarios, ni markdown.
+SOLO el JSON puro.
 
 Procede con el análisis:
 """
