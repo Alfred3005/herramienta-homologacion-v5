@@ -668,7 +668,7 @@ def execute_analysis():
         st.error("❌ No se ha cargado el archivo de normativa")
         return
 
-    st.info("🔄 Iniciando análisis con sistema de validación v5.30...")
+    st.info("🔄 Iniciando análisis con sistema de validación v5.33-new...")
 
     try:
         # Importar validador
@@ -979,7 +979,9 @@ def execute_analysis():
         ✅ **Análisis completado exitosamente**
 
         - Puestos analizados: **{len(resultados)}**
-        - Criterios aplicados: **3** (Verbos Débiles, Contextual, Impacto Jerárquico)
+        - Sistema: **v5.33-new** con validaciones adicionales de calidad
+        - Criterios aplicados: **3** (Análisis Semántico, Contextual, Impacto Jerárquico)
+        - Validaciones adicionales: Duplicados, Malformadas, Marco Legal, Objetivo
         - Matriz de decisión: **2-of-3**
         """)
 
