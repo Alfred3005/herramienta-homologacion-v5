@@ -191,12 +191,14 @@ def generate_detailed_report(analisis_json: Dict[str, Any]) -> str:
             "muestra_aprobadas": criterio_1['detalles']['aprobadas'][:3] if len(criterio_1['detalles']['aprobadas']) > 0 else [],
             "muestra_observadas": criterio_1['detalles']['observadas'][:3] if len(criterio_1['detalles']['observadas']) > 0 else [],
             "muestra_rechazadas": criterio_1['detalles']['rechazadas'][:3] if len(criterio_1['detalles']['rechazadas']) > 0 else [],
-            # NUEVO v5.33: Validaciones adicionales
+            # NUEVO v5.33: Validaciones adicionales CON DETALLE COMPLETO
             "validaciones_adicionales": {
                 "duplicados": criterio_1.get('validaciones_adicionales', {}).get('duplicacion', {}).get('total_duplicados', 0),
                 "malformadas": criterio_1.get('validaciones_adicionales', {}).get('malformacion', {}).get('total_malformadas', 0),
-                "detalles_duplicados": criterio_1.get('validaciones_adicionales', {}).get('duplicacion', {}).get('pares_duplicados', [])[:3],  # Max 3
-                "detalles_malformadas": criterio_1.get('validaciones_adicionales', {}).get('malformacion', {}).get('funciones_problematicas', [])[:3]  # Max 3
+                # INCLUIR TODOS LOS PARES DUPLICADOS (no solo 3)
+                "detalles_duplicados": criterio_1.get('validaciones_adicionales', {}).get('duplicacion', {}).get('pares_duplicados', []),
+                # INCLUIR TODAS LAS FUNCIONES MALFORMADAS (no solo 3)
+                "detalles_malformadas": criterio_1.get('validaciones_adicionales', {}).get('malformacion', {}).get('funciones_problematicas', [])
             }
         },
         "criterio_2": {
@@ -204,13 +206,15 @@ def generate_detailed_report(analisis_json: Dict[str, Any]) -> str:
             "alineacion": validacion['criterios']['criterio_2_contextual']['alineacion']['clasificacion'],
             "confianza": validacion['criterios']['criterio_2_contextual']['alineacion']['confianza'],
             "razonamiento": validacion['criterios']['criterio_2_contextual']['razonamiento'][:500],  # Truncar
-            # NUEVO v5.33: Validaciones adicionales
+            # NUEVO v5.33: Validaciones adicionales CON DETALLE COMPLETO
             "validaciones_adicionales": {
                 "problemas_legales": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('marco_legal', {}).get('total_problemas', 0),
                 "objetivo_adecuado": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('objetivo_general', {}).get('es_adecuado', True),
                 "calificacion_objetivo": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('objetivo_general', {}).get('calificacion', 1.0),
-                "detalles_problemas_legales": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('marco_legal', {}).get('problemas', [])[:3],  # Max 3
-                "detalles_problemas_objetivo": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('objetivo_general', {}).get('problemas', [])[:3]  # Max 3
+                # INCLUIR TODOS LOS PROBLEMAS LEGALES (no solo 3)
+                "detalles_problemas_legales": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('marco_legal', {}).get('problemas', []),
+                # INCLUIR TODOS LOS PROBLEMAS DE OBJETIVO (no solo 3)
+                "detalles_problemas_objetivo": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('objetivo_general', {}).get('problemas', [])
             }
         },
         "criterio_3": {
@@ -280,9 +284,36 @@ Para cada categoría (aprobadas, observadas, rechazadas), analiza 1-2 ejemplos:
 
 **Validaciones Adicionales de Calidad (v5.33):**
 
-Si se detectaron problemas adicionales, inclúyelos en el análisis:
-- **Funciones Duplicadas:** Número de pares duplicados y ejemplos específicos
-- **Funciones Malformadas:** Número de funciones con problemas (vacías, placeholders, sin sentido) y tipos de problemas detectados
+**IMPORTANTE:** Si se detectaron problemas adicionales, DEBES incluir el **DETALLE COMPLETO** de TODOS los problemas detectados en una tabla clara:
+
+**A) Funciones Duplicadas Semánticamente:**
+Si hay duplicados (total_duplicados > 0), crea una tabla con:
+- Función 1 ID y Función 2 ID
+- Porcentaje de similitud
+- Descripción de POR QUÉ son similares
+- Sugerencia de corrección
+
+**Formato de Tabla:**
+| Par | Funciones | Similitud | Razón | Sugerencia |
+|-----|-----------|-----------|-------|------------|
+| 1 | F2 ↔ F3 | 90% | Ambas describen coordinar acciones... | Consolidar en una sola función |
+| 2 | F5 ↔ F6 | 85% | Supervisar y vigilar son sinónimos... | Usar un solo verbo |
+
+**B) Funciones Malformadas:**
+Si hay malformadas (total_malformadas > 0), crea una tabla con:
+- Función ID
+- Tipo(s) de problema (VACIA, PLACEHOLDER, MUY_CORTA, SIN_VERBO, SIN_COMPLEMENTO, SIN_RESULTADO, SIN_SENTIDO)
+- Severidad (CRITICAL, HIGH, MODERATE, LOW)
+- Descripción del problema
+- Fragmento de texto problemático (max 100 chars)
+
+**Formato de Tabla:**
+| Función | Tipo Problema | Severidad | Descripción | Texto Problemático |
+|---------|---------------|-----------|-------------|-------------------|
+| F4 | PLACEHOLDER | CRITICAL | Función vacía con "..." | "..." |
+| F7 | MUY_CORTA | HIGH | Menos de 15 caracteres | "Hacer" |
+
+**INSTRUCCIÓN CRÍTICA:** NO resumas ni omitas problemas. Incluye TODOS los pares duplicados y TODAS las funciones malformadas que aparecen en los datos JSON.
 
 #### 4.2 Criterio 2: Validación Contextual
 
@@ -300,23 +331,64 @@ Explica qué significa este resultado y por qué el criterio PASÓ/FALLÓ
 
 **Validaciones Adicionales de Calidad (v5.33):**
 
-Si se detectaron problemas adicionales, inclúyelos en el análisis:
-- **Problemas de Marco Legal:** Organismos extintos, leyes obsoletas, referencias inválidas
-- **Problemas de Objetivo General:** Objetivo muy corto/largo, sin verbo rector, sin finalidad, genérico o incoherente
+**IMPORTANTE:** Si se detectaron problemas adicionales, DEBES incluir el **DETALLE COMPLETO** de TODOS los problemas detectados en tablas claras:
+
+**A) Problemas de Marco Legal:**
+Si hay problemas legales (total_problemas > 0), crea una tabla con:
+- Tipo de problema (ORGANISMO_EXTINTO, LEY_OBSOLETA, REFERENCIA_INVALIDA, INCONSISTENCIA)
+- Severidad (CRITICAL, HIGH, MODERATE, LOW)
+- Descripción del problema
+- Referencia problemática (texto específico)
+- Sugerencia de corrección
+
+**Formato de Tabla:**
+| # | Tipo | Severidad | Descripción | Referencia Problemática | Sugerencia |
+|---|------|-----------|-------------|------------------------|------------|
+| 1 | ORGANISMO_EXTINTO | HIGH | Referencia a CONACYT extinto | "Ley Orgánica del CONACYT" | Actualizar a nueva denominación |
+
+**B) Problemas de Objetivo General:**
+Si el objetivo es inadecuado (es_adecuado = false), crea una tabla con:
+- Tipo de problema (MUY_CORTO, MUY_LARGO, SIN_VERBO, SIN_FINALIDAD, GENERICO, INCOHERENTE)
+- Severidad (CRITICAL, HIGH, MODERATE, LOW)
+- Descripción específica del problema
+- Calificación obtenida (0.0 - 1.0)
+
+**Formato de Tabla:**
+| # | Tipo Problema | Severidad | Descripción | Calificación |
+|---|---------------|-----------|-------------|--------------|
+| 1 | MUY_CORTO | CRITICAL | Solo 11 caracteres | 20% |
+| 2 | SIN_FINALIDAD | HIGH | No explica el para qué del puesto | 20% |
+
+**INSTRUCCIÓN CRÍTICA:** NO resumas ni omitas problemas. Incluye TODOS los problemas legales y TODOS los problemas de objetivo que aparecen en los datos JSON.
 
 #### 4.3 Criterio 3: Impacto Jerárquico
 
 **Objetivo del Criterio:**
-Coherencia entre el impacto de las funciones y el nivel salarial del puesto
+Evaluar si el impacto declarado en las funciones es coherente con el nivel jerárquico del puesto
+
+**Metodología:**
+- Evalúa apropiación de verbos, alcance de decisiones, consecuencias de errores y complejidad
+- Clasifica discrepancias como CRITICAL (sin respaldo normativo) o MODERATE (con respaldo normativo)
+- Umbral: ≤50% funciones CRITICAL para aprobar
 
 **Resultados:**
-- Métricas de impacto
-- Funciones con discrepancias
-- Tasa crítica vs umbral
-- Decisión: PASS/FAIL
+Extrae del JSON los valores de criterio_3.metricas y preséntales así:
+- Total funciones analizadas: [valor]
+- Funciones CRITICAL (discrepancias sin respaldo): [valor]
+- Funciones MODERATE (discrepancias con respaldo): [valor]
+- **Tasa Crítica:** [valor]% (umbral: ≤50%)
+- **Decisión:** [PASS o FAIL]
 
-**Interpretación:**
-Análisis de coherencia jerárquica
+**Interpretación Importante:**
+**⚠️ Tasa Crítica 0% = EXCELENTE**
+Una tasa de 0% significa que **NO se detectaron funciones con discrepancias de impacto sin respaldo normativo**.
+Esto es **POSITIVO** e indica que:
+- Todas las funciones tienen impacto coherente con el nivel jerárquico del puesto
+- No hay verbos prohibidos o inapropiados para el nivel
+- El alcance, consecuencias y complejidad son adecuados
+- Cualquier discrepancia menor está respaldada normativamente
+
+**Nota:** El Criterio 3 evalúa coherencia jerárquica, NO cantidad de funciones. Una tasa de 0% indica máxima coherencia.
 
 ### 5. Aplicación de la Matriz 2-of-3
 
