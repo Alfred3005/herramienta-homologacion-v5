@@ -4,8 +4,10 @@ Report Humanizer - Convierte análisis técnico JSON a reportes en lenguaje natu
 Este módulo usa LLM para generar reportes humanizados a partir de los JSON de análisis,
 facilitando la comprensión y auditoría de las decisiones de validación.
 
-Autor: Claude Code v5.28
-Fecha: 2025-11-07
+Incluye soporte para validaciones adicionales v5.33 (duplicados, malformadas, marco legal, objetivo).
+
+Autor: Claude Code v5.33-new
+Fecha: 2025-11-10
 """
 
 import json
@@ -43,7 +45,7 @@ Tu tarea es generar un **RESUMEN EJECUTIVO** en lenguaje claro y profesional a p
 **INFORMACIÓN DEL PUESTO:**
 - Código: {puesto['codigo']}
 - Denominación: {puesto['denominacion']}
-- Nivel Salarial: {puesto['nivel']}
+- Nivel Salarial: {puesto.get('nivel', puesto.get('nivel_salarial', 'N/A'))}
 
 **RESULTADO DE VALIDACIÓN:**
 - Decisión Final: {validacion['resultado']}
@@ -59,10 +61,19 @@ Tu tarea es generar un **RESUMEN EJECUTIVO** en lenguaje claro y profesional a p
 - Funciones Rechazadas: {validacion['criterios']['criterio_1_verbos']['funciones_rechazadas']}/{validacion['criterios']['criterio_1_verbos']['total_funciones']}
 - Tasa Crítica: {validacion['criterios']['criterio_1_verbos']['tasa_critica']:.0%}
 
+**Validaciones Adicionales - Criterio 1:**
+- Duplicados Detectados: {validacion['criterios']['criterio_1_verbos'].get('validaciones_adicionales', {}).get('duplicacion', {}).get('total_duplicados', 0)}
+- Funciones Malformadas: {validacion['criterios']['criterio_1_verbos'].get('validaciones_adicionales', {}).get('malformacion', {}).get('total_malformadas', 0)}
+
 **Criterio 2 - Validación Contextual:**
 - Resultado: {validacion['criterios']['criterio_2_contextual']['resultado']}
 - Alineación: {validacion['criterios']['criterio_2_contextual']['alineacion']['clasificacion']}
 - Confianza: {validacion['criterios']['criterio_2_contextual']['alineacion']['confianza']:.2f}
+
+**Validaciones Adicionales - Criterio 2:**
+- Problemas Marco Legal: {validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('marco_legal', {}).get('total_problemas', 0)}
+- Objetivo Adecuado: {'Sí' if validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('objetivo_general', {}).get('es_adecuado', True) else 'No'}
+- Calificación Objetivo: {validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('objetivo_general', {}).get('calificacion', 1.0):.0%}
 
 **Criterio 3 - Impacto Jerárquico:**
 - Resultado: {validacion['criterios']['criterio_3_impacto']['resultado']}
@@ -92,12 +103,14 @@ Genera un **RESUMEN EJECUTIVO** de 1-2 páginas en formato Markdown con las sigu
 - Resume los resultados (cuántas funciones pasaron/fallaron)
 - Explica POR QUÉ se obtuvo este resultado
 - Indica si el criterio PASÓ o FALLÓ y qué significa
+- **Validaciones Adicionales:** Si se detectaron duplicados o funciones malformadas, explica cuántos y qué implica esto
 
 #### Criterio 2: Validación Contextual
 - Explica QUÉ se evaluó (alineación con normativa institucional)
 - Indica el nivel de alineación encontrado
 - Explica POR QUÉ se obtuvo este nivel de confianza
 - Indica si el criterio PASÓ o FALLÓ
+- **Validaciones Adicionales:** Si se detectaron problemas en el marco legal (organismos extintos, leyes obsoletas) o el objetivo general es inadecuado, explica qué problemas se encontraron
 
 #### Criterio 3: Impacto Jerárquico
 - Explica QUÉ se evaluó (coherencia del impacto de las funciones con el nivel salarial)
@@ -132,7 +145,7 @@ Genera un **RESUMEN EJECUTIVO** de 1-2 páginas en formato Markdown con las sigu
         # Añadir metadatos
         header = f"""# 📄 REPORTE DE VALIDACIÓN - MODO SIMPLIFICADO
 
-**Generado por:** Sistema de Validación APF v5.28
+**Generado por:** Sistema de Validación APF v5.33-new
 **Fecha de generación:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
 **Tipo de reporte:** Resumen Ejecutivo
 
@@ -177,13 +190,28 @@ def generate_detailed_report(analisis_json: Dict[str, Any]) -> str:
             # Incluir solo primeras 3 funciones de cada categoría para no exceder tokens
             "muestra_aprobadas": criterio_1['detalles']['aprobadas'][:3] if len(criterio_1['detalles']['aprobadas']) > 0 else [],
             "muestra_observadas": criterio_1['detalles']['observadas'][:3] if len(criterio_1['detalles']['observadas']) > 0 else [],
-            "muestra_rechazadas": criterio_1['detalles']['rechazadas'][:3] if len(criterio_1['detalles']['rechazadas']) > 0 else []
+            "muestra_rechazadas": criterio_1['detalles']['rechazadas'][:3] if len(criterio_1['detalles']['rechazadas']) > 0 else [],
+            # NUEVO v5.33: Validaciones adicionales
+            "validaciones_adicionales": {
+                "duplicados": criterio_1.get('validaciones_adicionales', {}).get('duplicacion', {}).get('total_duplicados', 0),
+                "malformadas": criterio_1.get('validaciones_adicionales', {}).get('malformacion', {}).get('total_malformadas', 0),
+                "detalles_duplicados": criterio_1.get('validaciones_adicionales', {}).get('duplicacion', {}).get('pares_duplicados', [])[:3],  # Max 3
+                "detalles_malformadas": criterio_1.get('validaciones_adicionales', {}).get('malformacion', {}).get('funciones_problematicas', [])[:3]  # Max 3
+            }
         },
         "criterio_2": {
             "resultado": validacion['criterios']['criterio_2_contextual']['resultado'],
             "alineacion": validacion['criterios']['criterio_2_contextual']['alineacion']['clasificacion'],
             "confianza": validacion['criterios']['criterio_2_contextual']['alineacion']['confianza'],
-            "razonamiento": validacion['criterios']['criterio_2_contextual']['razonamiento'][:500]  # Truncar
+            "razonamiento": validacion['criterios']['criterio_2_contextual']['razonamiento'][:500],  # Truncar
+            # NUEVO v5.33: Validaciones adicionales
+            "validaciones_adicionales": {
+                "problemas_legales": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('marco_legal', {}).get('total_problemas', 0),
+                "objetivo_adecuado": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('objetivo_general', {}).get('es_adecuado', True),
+                "calificacion_objetivo": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('objetivo_general', {}).get('calificacion', 1.0),
+                "detalles_problemas_legales": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('marco_legal', {}).get('problemas', [])[:3],  # Max 3
+                "detalles_problemas_objetivo": validacion['criterios']['criterio_2_contextual'].get('validaciones_adicionales', {}).get('objetivo_general', {}).get('problemas', [])[:3]  # Max 3
+            }
         },
         "criterio_3": {
             "resultado": validacion['criterios']['criterio_3_impacto']['resultado'],
@@ -250,6 +278,12 @@ Para cada categoría (aprobadas, observadas, rechazadas), analiza 1-2 ejemplos:
 - Razonamiento del sistema
 - Por qué fue clasificada así
 
+**Validaciones Adicionales de Calidad (v5.33):**
+
+Si se detectaron problemas adicionales, inclúyelos en el análisis:
+- **Funciones Duplicadas:** Número de pares duplicados y ejemplos específicos
+- **Funciones Malformadas:** Número de funciones con problemas (vacías, placeholders, sin sentido) y tipos de problemas detectados
+
 #### 4.2 Criterio 2: Validación Contextual
 
 **Objetivo del Criterio:**
@@ -263,6 +297,12 @@ Validación mediante LLM de la alineación con normativa institucional
 
 **Interpretación:**
 Explica qué significa este resultado y por qué el criterio PASÓ/FALLÓ
+
+**Validaciones Adicionales de Calidad (v5.33):**
+
+Si se detectaron problemas adicionales, inclúyelos en el análisis:
+- **Problemas de Marco Legal:** Organismos extintos, leyes obsoletas, referencias inválidas
+- **Problemas de Objetivo General:** Objetivo muy corto/largo, sin verbo rector, sin finalidad, genérico o incoherente
 
 #### 4.3 Criterio 3: Impacto Jerárquico
 
@@ -329,7 +369,7 @@ Observaciones importantes para la toma de decisiones
         # Añadir metadatos
         header = f"""# 📋 REPORTE DE AUDITORÍA COMPLETO - ANÁLISIS DETALLADO
 
-**Generado por:** Sistema de Validación APF v5.28
+**Generado por:** Sistema de Validación APF v5.33-new
 **Fecha de generación:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
 **Tipo de reporte:** Análisis Detallado para Auditoría
 

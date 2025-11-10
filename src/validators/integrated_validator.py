@@ -8,8 +8,8 @@ Orquesta la validación completa de un puesto usando:
 
 Decisión Final: Matriz 2-of-3
 
-Fecha: 2025-11-06
-Versión: 5.0 - ADAPTADO CON VALIDADORES LLM DE V4
+Fecha: 2025-11-10
+Versión: 5.33-new - CON VALIDACIONES ADICIONALES DE CALIDAD
 """
 
 import logging
@@ -20,6 +20,7 @@ from src.validators.criterion_3_validator import Criterion3Validator
 from src.validators.contextual_verb_validator import ContextualVerbValidator
 from src.validators.verb_semantic_analyzer import VerbSemanticAnalyzer
 from src.validators.function_semantic_evaluator import FunctionSemanticEvaluator
+from src.validators.advanced_quality_validator import AdvancedQualityValidator
 from src.validators.shared_utilities import APFContext
 from src.validators.in_memory_normativa_adapter import create_loader_from_fragments
 from src.validators.models import (
@@ -99,14 +100,17 @@ class IntegratedValidator:
             threshold=0.50
         )
 
-        logger.info("[IntegratedValidator] Inicializado con validadores LLM v4 + FunctionEvaluator v5.20")
+        # Inicializar AdvancedQualityValidator v5.33-new (análisis holístico de calidad)
+        self.quality_validator = AdvancedQualityValidator(context=self.context)
+
+        logger.info("[IntegratedValidator] Inicializado con validadores LLM v4 + FunctionEvaluator v5.20 + QualityValidator v5.33")
 
     def validate_puesto(
         self,
         puesto_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Valida un puesto completo usando los 3 criterios.
+        Valida un puesto completo usando los 3 criterios + validaciones de calidad.
 
         Args:
             puesto_data: Diccionario con datos del puesto
@@ -115,7 +119,8 @@ class IntegratedValidator:
                     "denominacion": str,
                     "nivel_salarial": str,
                     "unidad_responsable": str,
-                    "funciones": List[Dict]
+                    "funciones": List[Dict],
+                    "objetivo_general": str (opcional)
                 }
 
         Returns:
@@ -126,6 +131,43 @@ class IntegratedValidator:
         funciones = puesto_data.get("funciones", [])
 
         logger.info(f"[IntegratedValidator] Validando puesto {codigo}")
+
+        # Ejecutar análisis de calidad holístico (v5.33-new)
+        # Este análisis detecta: duplicados, malformadas, problemas legales, objetivo inadecuado
+        logger.info(f"[IntegratedValidator] Ejecutando análisis de calidad holístico...")
+        try:
+            # Obtener texto completo de normativa si está disponible
+            normativa_text = None
+            if self.normativa_loader and hasattr(self.normativa_loader, 'documents'):
+                # Concatenar primeros 3 documentos (limitar tamaño)
+                docs = self.normativa_loader.documents[:3]
+                normativa_text = "\n\n".join([doc.content[:1000] for doc in docs])
+
+            quality_result = self.quality_validator.validate_puesto_completo(
+                puesto_data=puesto_data,
+                normativa_text=normativa_text
+            )
+            logger.info(
+                f"[IntegratedValidator] Análisis de calidad completado: "
+                f"{quality_result.total_flags} flags detectados "
+                f"(CRITICAL: {quality_result.flags_critical}, HIGH: {quality_result.flags_high}, "
+                f"MODERATE: {quality_result.flags_moderate}, LOW: {quality_result.flags_low})"
+            )
+        except Exception as e:
+            logger.error(f"[IntegratedValidator] Error en análisis de calidad: {e}")
+            # Crear resultado vacío si falla
+            from src.validators.advanced_quality_validator import QualityValidationResult
+            quality_result = QualityValidationResult(
+                duplicacion={"tiene_duplicados": False, "total_duplicados": 0, "pares_duplicados": []},
+                malformacion={"tiene_malformadas": False, "total_malformadas": 0, "funciones_problematicas": []},
+                marco_legal={"tiene_problemas": False, "total_problemas": 0, "problemas": []},
+                objetivo_general={"es_adecuado": True, "calificacion": 1.0, "problemas": []},
+                total_flags=0,
+                flags_critical=0,
+                flags_high=0,
+                flags_moderate=0,
+                flags_low=0
+            )
 
         # Ejecutar 3 criterios CON LLM
         criterion_1 = self._validate_criterion_1(codigo, funciones, nivel, puesto_data)
@@ -143,22 +185,24 @@ class IntegratedValidator:
             criterion_3
         )
 
-        # Construir resultado
+        # Construir resultado con estructura robusta
         result = {
             "puesto": {
                 "codigo": codigo,
                 "denominacion": puesto_data.get("denominacion", ""),
-                "nivel": nivel,
+                "nivel": nivel,  # Campo principal
+                "nivel_salarial": nivel,  # Alias para compatibilidad (evita KeyError)
                 "unidad_responsable": puesto_data.get("unidad_responsable", "")
             },
             "validacion": {
                 "resultado": final_decision.resultado,
                 "clasificacion": final_decision.clasificacion.value,
                 "criterios_aprobados": final_decision.criteria_passed,
+                "total_criterios": 3,  # Evitar hardcoding (v5.33)
                 "confianza": round(final_decision.confidence_global, 2),
                 "criterios": {
-                    "criterio_1_verbos": self._format_criterion_1(criterion_1),
-                    "criterio_2_contextual": self._format_criterion_2(criterion_2),
+                    "criterio_1_verbos": self._format_criterion_1(criterion_1, quality_result),
+                    "criterio_2_contextual": self._format_criterion_2(criterion_2, quality_result),
                     "criterio_3_impacto": self._format_criterion_3(criterion_3)
                 },
                 "accion_requerida": final_decision.accion_requerida,
@@ -349,8 +393,12 @@ class IntegratedValidator:
                 reasoning=f"Error en validación LLM: {str(e)}"
             )
 
-    def _format_criterion_1(self, criterion: Criterion1Result) -> Dict[str, Any]:
-        """Formatea resultado de Criterio 1 para JSON (v5.20+)"""
+    def _format_criterion_1(self, criterion: Criterion1Result, quality_result=None) -> Dict[str, Any]:
+        """
+        Formatea resultado de Criterio 1 para JSON (v5.33+).
+
+        Incluye validaciones adicionales de calidad (duplicación, malformación).
+        """
         result = {
             "resultado": criterion.result.value,
             "tasa_aprobadas": round(criterion.approval_rate, 2),
@@ -367,13 +415,35 @@ class IntegratedValidator:
         if criterion.details:
             result["detalles"] = criterion.details
 
+        # AGREGAR VALIDACIONES ADICIONALES DE CALIDAD (v5.33+)
+        if quality_result:
+            result["validaciones_adicionales"] = {
+                "duplicacion": quality_result.duplicacion,
+                "malformacion": quality_result.malformacion
+            }
+        else:
+            # Estructura vacía si no hay quality_result
+            result["validaciones_adicionales"] = {
+                "duplicacion": {
+                    "tiene_duplicados": False,
+                    "total_duplicados": 0,
+                    "pares_duplicados": []
+                },
+                "malformacion": {
+                    "tiene_malformadas": False,
+                    "total_malformadas": 0,
+                    "funciones_problematicas": []
+                }
+            }
+
         return result
 
-    def _format_criterion_2(self, criterion: Criterion2Result) -> Dict[str, Any]:
+    def _format_criterion_2(self, criterion: Criterion2Result, quality_result=None) -> Dict[str, Any]:
         """
-        Formatea resultado de Criterio 2 para JSON con máxima transparencia.
+        Formatea resultado de Criterio 2 para JSON con máxima transparencia (v5.33+).
 
-        Incluye razonamiento LLM, evidencias y flags para auditabilidad completa.
+        Incluye razonamiento LLM, evidencias, flags y validaciones adicionales de calidad
+        (marco legal, objetivo general).
         """
         result = {
             # ========== RESULTADO ==========
@@ -421,6 +491,27 @@ class IntegratedValidator:
                 for flag in criterion.flags_detected
             ] if criterion.flags_detected else []
         }
+
+        # AGREGAR VALIDACIONES ADICIONALES DE CALIDAD (v5.33+)
+        if quality_result:
+            result["validaciones_adicionales"] = {
+                "marco_legal": quality_result.marco_legal,
+                "objetivo_general": quality_result.objetivo_general
+            }
+        else:
+            # Estructura vacía si no hay quality_result
+            result["validaciones_adicionales"] = {
+                "marco_legal": {
+                    "tiene_problemas": False,
+                    "total_problemas": 0,
+                    "problemas": []
+                },
+                "objetivo_general": {
+                    "es_adecuado": True,
+                    "calificacion": 1.0,
+                    "problemas": []
+                }
+            }
 
         return result
 

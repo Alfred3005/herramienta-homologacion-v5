@@ -186,7 +186,7 @@ def show():
             tabla_data.append({
                 'Código': puesto['codigo'],
                 'Denominación': puesto['denominacion'],
-                'Nivel': puesto['nivel'],
+                'Nivel': puesto.get('nivel', puesto.get('nivel_salarial', 'N/A')),  # Safe access v5.33
                 'Resultado': val['resultado'],
                 'Confianza': f"{val['confianza']:.2f}",
                 'C1 (Verbos)': c1['resultado'],
@@ -317,7 +317,7 @@ def show():
         val = puesto_data['validacion']
 
         st.markdown(f"### {puesto['denominacion']}")
-        st.markdown(f"**Código:** {puesto['codigo']} | **Nivel:** {puesto['nivel']}")
+        st.markdown(f"**Código:** {puesto['codigo']} | **Nivel:** {puesto.get('nivel', puesto.get('nivel_salarial', 'N/A'))}")
 
         # Resultado general
         if val['resultado'] in ['APROBADO_CON_OBSERVACIONES', 'APROBADO_PLENO']:
