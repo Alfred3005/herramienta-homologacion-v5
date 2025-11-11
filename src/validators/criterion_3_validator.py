@@ -4,15 +4,15 @@ Validador de Criterio 3: Apropiación de Impacto Jerárquico
 Evalúa si el impacto declarado en las funciones es coherente con el nivel
 jerárquico del puesto, combinando:
 1. Apropiación de verbos por nivel
-2. Coherencia de impacto (alcance, consecuencias, complejidad)
-3. Validación normativa de discrepancias
+2. Coherencia de impacto (alcance, consecuencias, complejidad) CON LLM
+3. Validación normativa de discrepancias CON LLM
 
 Threshold: >50% funciones CRÍTICAS (sin respaldo) → FAIL
 CRÍTICO: Discrepancia sin respaldo normativo
 MODERATE: Discrepancia con respaldo normativo
 
-Fecha: 2025-11-05
-Versión: 5.0
+Fecha: 2025-11-11
+Versión: 5.34 (con LLM para análisis de impacto)
 """
 
 import logging
@@ -26,6 +26,8 @@ from src.config.verb_hierarchy import (
     is_verb_forbidden
 )
 from src.validators.impact_analyzer import ImpactAnalyzer
+from src.validators.hierarchical_impact_llm_validator import HierarchicalImpactLLMValidator
+from src.validators.shared_utilities import APFContext
 from src.validators.models import (
     Criterion3Result,
     FunctionImpactAnalysis,
@@ -47,7 +49,9 @@ class Criterion3Validator:
     def __init__(
         self,
         normativa_fragments: Optional[List[str]] = None,
-        threshold: float = 0.50
+        threshold: float = 0.50,
+        context: Optional[APFContext] = None,
+        use_llm: bool = True
     ):
         """
         Inicializa el validador.
@@ -55,10 +59,22 @@ class Criterion3Validator:
         Args:
             normativa_fragments: Fragmentos de normativa para búsqueda de respaldo
             threshold: Umbral para fallar el criterio (default 50%)
+            context: APFContext con API keys (requerido si use_llm=True)
+            use_llm: Si True, usa LLM para análisis de impacto y búsqueda normativa
         """
         self.normativa_fragments = normativa_fragments or []
         self.threshold = threshold
-        self.analyzer = ImpactAnalyzer()
+        self.analyzer = ImpactAnalyzer()  # Mantener como fallback
+        self.use_llm = use_llm
+        self.llm_validator = None
+
+        if use_llm:
+            if context is None:
+                logger.warning("[Criterio 3] use_llm=True pero no se proporcionó context. Desactivando LLM.")
+                self.use_llm = False
+            else:
+                self.llm_validator = HierarchicalImpactLLMValidator(context)
+                logger.info("[Criterio 3] Inicializado CON análisis LLM (GPT-4o-mini)")
 
     def validate(
         self,
@@ -150,7 +166,7 @@ class Criterion3Validator:
         expected_impact: Dict[str, str]
     ) -> FunctionImpactAnalysis:
         """
-        Analiza una función individual.
+        Analiza una función individual (CON o SIN LLM).
 
         Args:
             func: Diccionario con la función
@@ -164,6 +180,7 @@ class Criterion3Validator:
         descripcion = func.get("descripcion_completa", "")
         que_hace = func.get("que_hace", "")
         para_que = func.get("para_que_lo_hace", "")
+        funcion_text = f"{descripcion} {que_hace} {para_que}".strip()
 
         # 1. Extraer verbo principal
         verbo = self.analyzer.extract_main_verb(que_hace)
@@ -172,65 +189,121 @@ class Criterion3Validator:
         es_apropiado = is_verb_appropriate(verbo, nivel)
         es_prohibido = is_verb_forbidden(verbo, nivel)
 
-        # 3. Analizar impacto
-        impact = self.analyzer.analyze_single_function(func)
+        # 3. Analizar impacto (CON LLM si está disponible)
+        if self.use_llm and self.llm_validator:
+            logger.debug(f"[Criterio 3] Analizando función {func_id} CON LLM")
+            llm_analysis = self.llm_validator.analyze_function_impact(
+                funcion_text,
+                nivel,
+                expected_impact
+            )
 
-        # 4. Evaluar coherencia de dimensiones
-        scope_eval = self.analyzer.evaluate_scope_coherence(
-            impact.detected_scope,
-            expected_impact.get("decision_scope", "local"),
-            nivel
-        )
+            # Usar resultados del LLM
+            impact_scope = llm_analysis.scope_level
+            impact_consequences = llm_analysis.consequences_level
+            impact_complexity = llm_analysis.complexity_level
 
-        cons_eval = self.analyzer.evaluate_consequences_coherence(
-            impact.detected_consequences,
-            expected_impact.get("error_consequences", "operational"),
-            nivel
-        )
+            # Coherencia basada en análisis LLM
+            scope_coherent = llm_analysis.is_appropriate_for_level
+            cons_coherent = llm_analysis.is_appropriate_for_level
+            complexity_coherent = llm_analysis.is_appropriate_for_level
 
-        complexity_eval = self.analyzer.evaluate_complexity_coherence(
-            impact.detected_complexity,
-            expected_impact.get("complexity_level", "routine"),
-            nivel
-        )
+        else:
+            # Fallback: usar ImpactAnalyzer basado en reglas
+            logger.debug(f"[Criterio 3] Analizando función {func_id} SIN LLM (reglas)")
+            impact = self.analyzer.analyze_single_function(func)
+
+            # 4. Evaluar coherencia de dimensiones
+            scope_eval = self.analyzer.evaluate_scope_coherence(
+                impact.detected_scope,
+                expected_impact.get("decision_scope", "local"),
+                nivel
+            )
+
+            cons_eval = self.analyzer.evaluate_consequences_coherence(
+                impact.detected_consequences,
+                expected_impact.get("error_consequences", "operational"),
+                nivel
+            )
+
+            complexity_eval = self.analyzer.evaluate_complexity_coherence(
+                impact.detected_complexity,
+                expected_impact.get("complexity_level", "routine"),
+                nivel
+            )
+
+            impact_scope = impact.detected_scope
+            impact_consequences = impact.detected_consequences
+            impact_complexity = impact.detected_complexity
+            scope_coherent = scope_eval.is_coherent
+            cons_coherent = cons_eval.is_coherent
+            complexity_coherent = complexity_eval.is_coherent
 
         # 5. Determinar si hay discrepancia
         has_discrepancy = (
             es_prohibido or
             not es_apropiado or
-            not scope_eval.is_coherent or
-            not cons_eval.is_coherent or
-            not complexity_eval.is_coherent
+            not scope_coherent or
+            not cons_coherent or
+            not complexity_coherent
         )
 
-        # 6. Buscar respaldo normativo si hay discrepancia
+        # 6. Buscar respaldo normativo si hay discrepancia (CON LLM si está disponible)
         normative_backing = None
         severity = ValidationSeverity.NONE
         issue_detected = None
 
         if has_discrepancy:
-            # Buscar en normativa
-            backing_found = self._search_normative_backing(
-                descripcion, que_hace, para_que
-            )
-
-            if backing_found:
-                # CON respaldo → MODERATE
-                severity = ValidationSeverity.MODERATE
-                normative_backing = backing_found
-                logger.debug(
-                    f"[Criterio 3] Función {func_id}: Discrepancia MODERATE (con respaldo)"
-                )
-            else:
-                # SIN respaldo → CRITICAL
-                severity = ValidationSeverity.CRITICAL
-                issue_detected = self._build_issue_description(
+            if self.use_llm and self.llm_validator:
+                # Búsqueda inteligente con LLM
+                discrepancy_desc = self._build_discrepancy_description(
                     verbo, es_prohibido, es_apropiado,
-                    scope_eval, cons_eval, complexity_eval
+                    scope_coherent, cons_coherent, complexity_coherent
                 )
-                logger.debug(
-                    f"[Criterio 3] Función {func_id}: Discrepancia CRITICAL (sin respaldo) - {issue_detected}"
+
+                llm_backing = self.llm_validator.search_normative_backing(
+                    funcion_text,
+                    self.normativa_fragments,
+                    discrepancy_desc
                 )
+
+                if llm_backing.has_backing and llm_backing.relevance_score >= 0.7:
+                    # CON respaldo → MODERATE
+                    severity = ValidationSeverity.MODERATE
+                    normative_backing = llm_backing.backing_text
+                    logger.debug(
+                        f"[Criterio 3] Función {func_id}: Discrepancia MODERATE (con respaldo LLM, score={llm_backing.relevance_score:.2f})"
+                    )
+                else:
+                    # SIN respaldo → CRITICAL
+                    severity = ValidationSeverity.CRITICAL
+                    issue_detected = discrepancy_desc
+                    logger.debug(
+                        f"[Criterio 3] Función {func_id}: Discrepancia CRITICAL (sin respaldo LLM) - {issue_detected}"
+                    )
+            else:
+                # Búsqueda simple basada en reglas (fallback)
+                backing_found = self._search_normative_backing(
+                    descripcion, que_hace, para_que
+                )
+
+                if backing_found:
+                    # CON respaldo → MODERATE
+                    severity = ValidationSeverity.MODERATE
+                    normative_backing = backing_found
+                    logger.debug(
+                        f"[Criterio 3] Función {func_id}: Discrepancia MODERATE (con respaldo reglas)"
+                    )
+                else:
+                    # SIN respaldo → CRITICAL
+                    severity = ValidationSeverity.CRITICAL
+                    issue_detected = self._build_discrepancy_description(
+                        verbo, es_prohibido, es_apropiado,
+                        scope_coherent, cons_coherent, complexity_coherent
+                    )
+                    logger.debug(
+                        f"[Criterio 3] Función {func_id}: Discrepancia CRITICAL (sin respaldo) - {issue_detected}"
+                    )
 
         # 7. Crear análisis
         return FunctionImpactAnalysis(
@@ -241,12 +314,12 @@ class Criterion3Validator:
             verbo_principal=verbo,
             es_verbo_apropiado=es_apropiado,
             es_verbo_prohibido=es_prohibido,
-            detected_scope=impact.detected_scope,
-            detected_consequences=impact.detected_consequences,
-            detected_complexity=impact.detected_complexity,
-            scope_coherent=scope_eval.is_coherent,
-            consequences_coherent=cons_eval.is_coherent,
-            complexity_coherent=complexity_eval.is_coherent,
+            detected_scope=impact_scope,
+            detected_consequences=impact_consequences,
+            detected_complexity=impact_complexity,
+            scope_coherent=scope_coherent,
+            consequences_coherent=cons_coherent,
+            complexity_coherent=complexity_coherent,
             normative_backing=normative_backing,
             severity=severity,
             issue_detected=issue_detected
@@ -292,6 +365,35 @@ class Criterion3Validator:
 
         return None
 
+    def _build_discrepancy_description(
+        self,
+        verbo: str,
+        es_prohibido: bool,
+        es_apropiado: bool,
+        scope_coherent: bool,
+        cons_coherent: bool,
+        complexity_coherent: bool
+    ) -> str:
+        """Construye descripción de la discrepancia detectada (para LLM o reglas)"""
+        issues = []
+
+        if es_prohibido:
+            issues.append(f"Verbo '{verbo}' prohibido para este nivel")
+
+        if not es_apropiado:
+            issues.append(f"Verbo '{verbo}' no apropiado para este nivel")
+
+        if not scope_coherent:
+            issues.append(f"Alcance incoherente con nivel jerárquico")
+
+        if not cons_coherent:
+            issues.append(f"Consecuencias incoherentes con nivel")
+
+        if not complexity_coherent:
+            issues.append(f"Complejidad incoherente con nivel")
+
+        return " | ".join(issues) if issues else "Discrepancia detectada"
+
     def _build_issue_description(
         self,
         verbo: str,
@@ -301,7 +403,7 @@ class Criterion3Validator:
         cons_eval,
         complexity_eval
     ) -> str:
-        """Construye descripción del problema detectado"""
+        """Construye descripción del problema detectado (versión detallada con evaluaciones)"""
         issues = []
 
         if es_prohibido:

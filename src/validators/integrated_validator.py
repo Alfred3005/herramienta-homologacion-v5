@@ -94,16 +94,18 @@ class IntegratedValidator:
             context=self.context
         )
 
-        # Inicializar Criterion3Validator (ya existente en v5)
+        # Inicializar Criterion3Validator v5.34 (CON LLM para análisis de impacto)
         self.criterion3_validator = Criterion3Validator(
             normativa_fragments=normativa_fragments,
-            threshold=0.50
+            threshold=0.50,
+            context=self.context,  # Pasar context para habilitar LLM
+            use_llm=True  # Activar análisis LLM
         )
 
         # Inicializar AdvancedQualityValidator v5.33-new (análisis holístico de calidad)
         self.quality_validator = AdvancedQualityValidator(context=self.context)
 
-        logger.info("[IntegratedValidator] Inicializado con validadores LLM v4 + FunctionEvaluator v5.20 + QualityValidator v5.33")
+        logger.info("[IntegratedValidator] Inicializado con validadores LLM v4 + FunctionEvaluator v5.20 + Criterion3 v5.34 CON LLM + QualityValidator v5.33")
 
     def validate_puesto(
         self,

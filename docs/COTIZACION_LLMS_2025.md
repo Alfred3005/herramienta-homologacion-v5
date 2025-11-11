@@ -68,29 +68,26 @@ El sistema v5.33-new ejecuta las siguientes llamadas LLM por puesto:
 | **AdvancedQualityValidator** | 1 | gpt-4o-mini | ~2,500 | ~1,500 | 4,000 |
 | **Criterio 1 (por función)** | N* | gpt-4o-mini | ~1,200 | ~800 | 2,000 |
 | **Criterio 2 (contextual)** | 1 | gpt-4o-mini | ~1,000 | ~500 | 1,500 |
-| **Criterio 3 (Impacto Jerárquico)** | 0 | **Basado en reglas** | 0 | 0 | 0 |
-| **TOTAL POR PUESTO** | **N+2** | - | **~2,500N+3,500** | **~800N+2,000** | **~3,300N+5,500** |
+| **Criterio 3 (Impacto Jerárquico) v5.34** | N* | gpt-4o-mini | ~600 | ~400 | 1,000 |
+| **TOTAL POR PUESTO** | **2N+2** | - | **~3,700N+4,500** | **~1,200N+2,500** | **~4,900N+7,000** |
 
-**⚠️ NOTA IMPORTANTE SOBRE CRITERIO 3:**
+**✅ ACTUALIZACIÓN v5.34: Criterio 3 AHORA USA LLM**
 
-El Criterio 3 (Apropiación de Impacto Jerárquico) **NO utiliza LLM por diseño**. Funciona mediante:
-- ✅ Análisis de patrones de texto (regex)
-- ✅ Indicadores de impacto predefinidos (scope, consequences, complexity)
-- ✅ Comparación contra perfiles jerárquicos esperados
-- ✅ Clasificación: CRITICAL (sin respaldo) vs MODERATE (con respaldo)
+El Criterio 3 (Apropiación de Impacto Jerárquico) ahora utiliza **GPT-4o-mini** para:
+- ✅ Análisis semántico profundo del impacto real de cada función
+- ✅ Evaluación de coherencia con perfil jerárquico esperado
+- ✅ Búsqueda inteligente de respaldo normativo
+- ✅ Detección de discrepancias con mayor precisión
 
-**Ventajas del enfoque sin LLM:**
-- 🚀 Extremadamente rápido (sin latencia de API)
-- 💰 Costo: $0 (no consume tokens)
-- 🎯 Consistencia perfecta (mismas entradas = mismas salidas)
-- 🔒 No requiere API key para funcionar
+**Ventajas del enfoque CON LLM:**
+- 🎯 Mayor precisión en detección de discrepancias (capta contexto semántico)
+- 🔍 Búsqueda inteligente de respaldo normativo (no solo palabras clave)
+- 📊 Mejor comprensión de impacto implícito en el texto
+- 🌐 Manejo de redacciones no estándar
 
-**¿Funciona correctamente?**
-Sí. Los resultados de tus 25 puestos de Turismo con Tasa 0% confirman que está funcionando:
-- Detecta verbos apropiados/prohibidos por nivel
-- Analiza alcance, consecuencias y complejidad del texto
-- Clasifica discrepancias como CRITICAL o MODERATE
-- Tasa 0% significa: "no hay discrepancias críticas sin respaldo" (resultado positivo)
+**Costo adicional por puesto (12 funciones):**
+- Criterio 3: 12 funciones × $0.0006 = $0.0072
+- **Incremento total:** $0.0072 (de $0.012 a $0.019 por puesto)
 
 *N = número de funciones por puesto (promedio: 10-15)
 
@@ -100,40 +97,45 @@ Sí. Los resultados de tus 25 puestos de Turismo con Tasa 0% confirman que está
 - **Uso confirmado: ~45,000 tokens por puesto** (34K input + 12K output)
 - Validado por usuario en corridas exitosas de 25 puestos de Turismo
 
-### Ejemplo Real: Puesto con 12 funciones
+### Ejemplo Real: Puesto con 12 funciones (v5.34 CON Criterio 3 LLM)
 
 ```
-Input:  2,500 × 12 + 3,500 = 33,500 tokens (~34K)
-Output: 800 × 12 + 2,000 = 11,600 tokens (~12K)
-TOTAL: 45,100 tokens (~45K por puesto)
+Input:  3,700 × 12 + 4,500 = 48,900 tokens (~49K)
+Output: 1,200 × 12 + 2,500 = 16,900 tokens (~17K)
+TOTAL: 65,800 tokens (~66K por puesto)
 ```
 
-### Análisis de 25 Puestos de Turismo
+**Incremento vs v5.33:**
+- Antes (sin Criterio 3 LLM): ~45K tokens
+- Ahora (con Criterio 3 LLM): ~66K tokens
+- Incremento: +21K tokens (+47%)
+
+### Análisis de 25 Puestos de Turismo (v5.34)
 
 ```
 Funciones promedio por puesto: 12
-Total tokens input: 25 × 34K = 850,000 tokens (0.85M)
-Total tokens output: 25 × 12K = 300,000 tokens (0.30M)
-TOTAL: 1,150,000 tokens (1.15M)
+Total tokens input: 25 × 49K = 1,225,000 tokens (1.23M)
+Total tokens output: 25 × 17K = 425,000 tokens (0.43M)
+TOTAL: 1,650,000 tokens (1.65M)
 ```
 
 ---
 
 ## 💵 COSTO POR PUESTO - COMPARATIVA
 
-### Escenario Base: Puesto con 12 funciones (45K tokens)
+### Escenario Base: Puesto con 12 funciones (66K tokens - v5.34)
 
 | Proveedor | Modelo | Costo Input | Costo Output | **TOTAL/puesto** | Ahorro vs GPT-4o |
 |-----------|--------|-------------|--------------|------------------|------------------|
-| **OpenAI** | GPT-4o | $0.102 | $0.120 | **$0.222** | - (base) |
-| **OpenAI** | GPT-4o-mini | $0.005 | $0.007 | **$0.012** | **94.6%** ⭐ |
-| **OpenAI** | GPT-3.5-turbo | $0.017 | $0.018 | **$0.035** | 84.2% |
-| **DeepSeek** | V3 (cache miss) | $0.019 | $0.020 | **$0.039** | 82.4% |
-| **DeepSeek** | V3 (cache hit 50%) | $0.010 | $0.020 | **$0.030** | 86.5% |
-| **DeepSeek** | V3.2-Exp | $0.009 | $0.005 | **$0.014** | **93.7%** 🏆 |
-| **Gemini** | 2.5 Flash | $0.005 | $0.007 | **$0.012** | **94.6%** ⭐ |
-| **Gemini** | 2.5 Flash (reasoning) | $0.005 | $0.042 | **$0.047** | 78.8% |
-| **Gemini** | 2.5 Pro | $0.043 | $0.120 | **$0.163** | 26.6% |
+| **OpenAI** | GPT-4o | $0.147 | $0.169 | **$0.316** | - (base) |
+| **OpenAI** | GPT-4o-mini | $0.007 | $0.010 | **$0.017** | **94.6%** ⭐ |
+| **OpenAI** | GPT-3.5-turbo | $0.024 | $0.025 | **$0.049** | 84.5% |
+| **DeepSeek** | V3 (cache miss) | $0.027 | $0.028 | **$0.055** | 82.6% |
+| **DeepSeek** | V3 (cache hit 50%) | $0.014 | $0.028 | **$0.042** | 86.7% |
+| **DeepSeek** | V3.2-Exp | $0.014 | $0.007 | **$0.021** | **93.4%** 🏆 |
+| **Gemini** | 2.5 Flash | $0.007 | $0.010 | **$0.017** | **94.6%** ⭐ |
+| **Gemini** | 2.5 Flash (reasoning) | $0.007 | $0.059 | **$0.066** | 79.1% |
+| **Gemini** | 2.5 Pro | $0.061 | $0.169 | **$0.230** | 27.2% |
 
 ### Cálculos Detallados:
 
