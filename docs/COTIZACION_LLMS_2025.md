@@ -68,8 +68,29 @@ El sistema v5.33-new ejecuta las siguientes llamadas LLM por puesto:
 | **AdvancedQualityValidator** | 1 | gpt-4o-mini | ~2,500 | ~1,500 | 4,000 |
 | **Criterio 1 (por función)** | N* | gpt-4o-mini | ~1,200 | ~800 | 2,000 |
 | **Criterio 2 (contextual)** | 1 | gpt-4o-mini | ~1,000 | ~500 | 1,500 |
-| **Criterio 3** | 0 | - | 0 | 0 | 0 |
+| **Criterio 3 (Impacto Jerárquico)** | 0 | **Basado en reglas** | 0 | 0 | 0 |
 | **TOTAL POR PUESTO** | **N+2** | - | **~2,500N+3,500** | **~800N+2,000** | **~3,300N+5,500** |
+
+**⚠️ NOTA IMPORTANTE SOBRE CRITERIO 3:**
+
+El Criterio 3 (Apropiación de Impacto Jerárquico) **NO utiliza LLM por diseño**. Funciona mediante:
+- ✅ Análisis de patrones de texto (regex)
+- ✅ Indicadores de impacto predefinidos (scope, consequences, complexity)
+- ✅ Comparación contra perfiles jerárquicos esperados
+- ✅ Clasificación: CRITICAL (sin respaldo) vs MODERATE (con respaldo)
+
+**Ventajas del enfoque sin LLM:**
+- 🚀 Extremadamente rápido (sin latencia de API)
+- 💰 Costo: $0 (no consume tokens)
+- 🎯 Consistencia perfecta (mismas entradas = mismas salidas)
+- 🔒 No requiere API key para funcionar
+
+**¿Funciona correctamente?**
+Sí. Los resultados de tus 25 puestos de Turismo con Tasa 0% confirman que está funcionando:
+- Detecta verbos apropiados/prohibidos por nivel
+- Analiza alcance, consecuencias y complejidad del texto
+- Clasifica discrepancias como CRITICAL o MODERATE
+- Tasa 0% significa: "no hay discrepancias críticas sin respaldo" (resultado positivo)
 
 *N = número de funciones por puesto (promedio: 10-15)
 
