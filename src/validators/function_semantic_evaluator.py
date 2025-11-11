@@ -267,7 +267,7 @@ class FunctionSemanticEvaluator:
         # Llamar a OpenAI
         response = robust_openai_call(
             prompt=full_prompt,
-            model="openai/gpt-4o",
+            model="openai/gpt-4o-mini",  # Migrado a GPT-4o-mini (ahorro 94.6%)
             temperature=0.1,  # Baja temperatura para mayor consistencia
             max_tokens=1500,
             context=self.context
