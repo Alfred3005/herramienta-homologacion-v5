@@ -1,5 +1,5 @@
 """
-Advanced Quality Validator - Análisis Holístico Inteligente v5.33
+Advanced Quality Validator - Análisis Holístico Inteligente v5.36
 
 Validador único que analiza el puesto COMPLETO en una sola llamada LLM para detectar:
 1. Duplicación semántica entre funciones
@@ -10,9 +10,15 @@ Validador único que analiza el puesto COMPLETO en una sola llamada LLM para det
 Filosofía: Un LLM viendo TODO el contexto puede detectar problemas mejor
 que múltiples validadores viendo fragmentos.
 
+MEJORAS v5.36:
+- Límites de objetivo relajados: 30-800 chars (antes 50-500)
+- Tolerancia para objetivos extensos en puestos de alto nivel (500-700 chars es NORMAL)
+- Severidades más graduales para problemas de objetivo
+- Guidance específica para evitar falsos positivos en Secretarías/Subsecretarías
+
 Autor: Claude Code
-Fecha: 2025-11-10
-Versión: 5.33-new
+Fecha: 2025-11-11
+Versión: 5.36 (tolerante con objetivos de alto nivel)
 """
 
 import logging
@@ -204,12 +210,15 @@ Si se proporciona normativa institucional, valida que las funciones estén aline
 
 ### 4. OBJETIVO GENERAL
 Evalúa si el objetivo general es adecuado:
-- **MUY CORTO**: <50 caracteres (probablemente incompleto)
-- **MUY LARGO**: >500 caracteres (demasiado verboso)
-- **SIN VERBO**: No tiene verbo rector claro
-- **SIN FINALIDAD**: No explica el PARA QUÉ del puesto
+- **MUY CORTO**: <30 caracteres (extremadamente incompleto)
+- **MUY LARGO**: >800 caracteres (excesivamente verboso - puestos de alto nivel pueden tener objetivos extensos)
+- **SIN VERBO**: No tiene verbo rector claro al inicio
+- **SIN FINALIDAD**: No explica el PARA QUÉ del puesto (cláusula con "a fin de", "para", "con el objetivo de")
 - **GENÉRICO**: Demasiado vago o aplicable a cualquier puesto
 - **INCOHERENTE**: No corresponde a la denominación del puesto
+
+**IMPORTANTE**: Puestos de alto nivel (Secretarías, Subsecretarías) típicamente tienen objetivos más extensos y detallados.
+Sé TOLERANTE con objetivos de 200-700 caracteres si están bien estructurados y son coherentes con el nivel del puesto.
 
 ════════════════════════════════════════════════════════════════════════════════
 📤 FORMATO DE RESPUESTA
@@ -283,6 +292,15 @@ Retorna un JSON con la siguiente estructura EXACTA:
 3. SÉ PRECISO: Usa los IDs correctos de las funciones (1-indexed)
 4. SÉ CONSERVADOR: Si no estás seguro, NO lo marques como problema
 5. RETORNA JSON VÁLIDO: Sin comentarios, sin trailing commas
+
+**CRITERIOS DE SEVERIDAD PARA OBJETIVO GENERAL:**
+- CRITICAL: Solo si el objetivo está completamente vacío o es incomprensible
+- HIGH: Solo si falta verbo rector O finalidad (pero no ambos)
+- MODERATE: Si es muy largo (>800 chars) o genérico pero funcional
+- LOW: Si es largo (500-800 chars) pero bien estructurado y coherente
+
+**SÉ TOLERANTE**: Un objetivo de 500-700 caracteres en un puesto de Secretaría/Subsecretaría
+es NORMAL y APROPIADO. NO lo marques como problema a menos que sea realmente excesivo (>800).
 
 Si NO encuentras problemas en alguna categoría, retorna arrays vacíos:
 - "pares_duplicados": []
