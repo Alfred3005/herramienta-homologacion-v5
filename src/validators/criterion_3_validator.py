@@ -304,31 +304,22 @@ class Criterion3Validator:
             logger.debug(f"[Criterio 3] Analizando función {func_id} SIN LLM (reglas)")
             impact = self.analyzer.analyze_single_function(func)
 
-            # 4. Evaluar coherencia de dimensiones
-            scope_eval = self.analyzer.evaluate_scope_coherence(
-                impact.detected_scope,
-                expected_impact.get("decision_scope", "local"),
-                nivel
-            )
-
-            cons_eval = self.analyzer.evaluate_consequences_coherence(
-                impact.detected_consequences,
-                expected_impact.get("error_consequences", "operational"),
-                nivel
-            )
-
-            complexity_eval = self.analyzer.evaluate_complexity_coherence(
-                impact.detected_complexity,
-                expected_impact.get("complexity_level", "routine"),
-                nivel
-            )
-
             impact_scope = impact.detected_scope
             impact_consequences = impact.detected_consequences
             impact_complexity = impact.detected_complexity
-            scope_coherent = scope_eval.is_coherent
-            cons_coherent = cons_eval.is_coherent
-            complexity_coherent = complexity_eval.is_coherent
+
+            # Evaluar coherencia usando RANGOS ACEPTABLES (mismo que con LLM)
+            scope_coherent, cons_coherent, complexity_coherent = self._is_impact_within_acceptable_range(
+                impact_scope,
+                impact_consequences,
+                impact_complexity,
+                nivel
+            )
+
+            logger.debug(
+                f"[Criterio 3] F{func_id} - Impacto (reglas): scope={impact_scope}({scope_coherent}), "
+                f"cons={impact_consequences}({cons_coherent}), comp={impact_complexity}({complexity_coherent})"
+            )
 
         # 5. Determinar si hay discrepancia
         has_discrepancy = (
