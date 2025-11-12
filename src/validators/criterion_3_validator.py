@@ -224,7 +224,8 @@ class Criterion3Validator:
             critical_count,
             moderate_count,
             total_functions,
-            critical_rate
+            critical_rate,
+            threshold
         )
 
         # Construir resultado
@@ -236,7 +237,7 @@ class Criterion3Validator:
             critical_rate=critical_rate,
             threshold=threshold,
             function_analyses=function_analyses,
-            confidence=self._calculate_confidence(critical_rate, is_passing),
+            confidence=self._calculate_confidence(critical_rate, is_passing, threshold),
             reasoning=reasoning
         )
 
@@ -520,24 +521,25 @@ class Criterion3Validator:
         critical_count: int,
         moderate_count: int,
         total_functions: int,
-        critical_rate: float
+        critical_rate: float,
+        threshold: float
     ) -> str:
         """Construye explicación del resultado"""
         reasoning = f"Funciones CRÍTICAS (sin respaldo normativo): {critical_count}/{total_functions} ({critical_rate:.0%})\n"
         reasoning += f"Funciones MODERATE (con respaldo normativo): {moderate_count}/{total_functions}\n"
-        reasoning += f"Threshold: {self.threshold:.0%}\n"
+        reasoning += f"Threshold: {threshold:.0%}\n"
 
         if is_passing:
-            reasoning += f"✅ Criterio 3 APROBADO: Tasa crítica {critical_rate:.0%} ≤ {self.threshold:.0%}"
+            reasoning += f"✅ Criterio 3 APROBADO: Tasa crítica {critical_rate:.0%} ≤ {threshold:.0%}"
         else:
-            reasoning += f"❌ Criterio 3 RECHAZADO: Tasa crítica {critical_rate:.0%} > {self.threshold:.0%}"
+            reasoning += f"❌ Criterio 3 RECHAZADO: Tasa crítica {critical_rate:.0%} > {threshold:.0%}"
 
         return reasoning
 
-    def _calculate_confidence(self, critical_rate: float, is_passing: bool) -> float:
+    def _calculate_confidence(self, critical_rate: float, is_passing: bool, threshold: float) -> float:
         """Calcula confianza del resultado"""
         # Más confianza cuando la decisión es clara (lejos del threshold)
-        distance_from_threshold = abs(critical_rate - self.threshold)
+        distance_from_threshold = abs(critical_rate - threshold)
 
         if is_passing:
             # PASS: Confianza alta si está lejos del threshold
