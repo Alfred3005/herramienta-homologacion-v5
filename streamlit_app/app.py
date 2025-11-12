@@ -255,7 +255,7 @@ elif st.session_state.page == 'history':
 st.markdown("---")
 st.markdown(
     f"<div style='text-align: center; color: #888; font-size: 0.85rem; padding: 1rem 0;'>"
-    f"Sistema de Homologación APF <strong>v{VERSION}</strong> | Powered by OpenAI GPT-4o"
+    f"Sistema de Homologación APF <strong>v{VERSION}</strong> | Powered by OpenAI GPT-4o-mini"
     f"</div>",
     unsafe_allow_html=True
 )
