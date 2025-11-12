@@ -8,8 +8,17 @@ Orquesta la validación completa de un puesto usando:
 
 Decisión Final: Matriz 2-of-3
 
-Fecha: 2025-11-10
-Versión: 5.33-new - CON VALIDACIONES ADICIONALES DE CALIDAD
+OPTIMIZACIÓN v5.38:
+Caché de NormativaLoader - Cuando se analizan múltiples puestos con la misma
+normativa, el loader (con embeddings) se reutiliza automáticamente, evitando:
+- Re-procesamiento de fragmentos
+- Re-generación de embeddings
+- Re-creación de índice semántico
+
+Ahorro estimado: 80-90% del tiempo de inicialización en análisis múltiples.
+
+Fecha: 2025-11-11
+Versión: 5.38 - Con caché de normativa para análisis múltiples
 """
 
 import logging
@@ -40,12 +49,21 @@ class IntegratedValidator:
     Validador integrado que ejecuta los 3 criterios y calcula decisión final.
 
     VERSIÓN ADAPTADA: Usa validadores LLM reales de v4 para Criterio 1 y 2.
+
+    OPTIMIZACIÓN v5.38:
+    Caché de NormativaLoader - Cuando se analizan múltiples puestos con la misma
+    normativa, el loader se reutiliza en lugar de recrearse para cada puesto.
     """
+
+    # Class-level cache para NormativaLoader
+    _normativa_cache = {}
+    _normativa_cache_key = None
 
     def __init__(
         self,
         normativa_fragments: Optional[List[str]] = None,
-        openai_api_key: Optional[str] = None
+        openai_api_key: Optional[str] = None,
+        use_normativa_cache: bool = True
     ):
         """
         Inicializa el validador integrado.
@@ -53,9 +71,11 @@ class IntegratedValidator:
         Args:
             normativa_fragments: Fragmentos de normativa para validación
             openai_api_key: API key de OpenAI (para validadores LLM)
+            use_normativa_cache: Si True, reutiliza NormativaLoader de caché (default: True)
         """
         self.normativa_fragments = normativa_fragments or []
         self.openai_api_key = openai_api_key
+        self.use_normativa_cache = use_normativa_cache
 
         # Crear contexto APF para validadores v4
         self.context = APFContext()
@@ -63,23 +83,40 @@ class IntegratedValidator:
             self.context.set_data('openai_api_key', openai_api_key, 'IntegratedValidator')
             self.context.set_data('api_key', openai_api_key, 'IntegratedValidator')
 
-        # Crear NormativaLoader en memoria si hay fragmentos
+        # Crear o reutilizar NormativaLoader con caché
         self.normativa_loader = None
         if normativa_fragments:
-            try:
-                logger.info(f"[IntegratedValidator] Creando NormativaLoader con {len(normativa_fragments)} fragmentos")
-                self.normativa_loader = create_loader_from_fragments(
-                    text_fragments=normativa_fragments,
-                    document_title="Reglamento Interior",
-                    use_embeddings=True,  # Habilitado para precisión semántica (fix v5.26)
-                    context=self.context
-                )
-                logger.info("[IntegratedValidator] NormativaLoader creado exitosamente")
-                logger.info(f"[IntegratedValidator] embedding_mode: {self.normativa_loader.embedding_mode}")
-                logger.info(f"[IntegratedValidator] semantic_search disponible: {hasattr(self.normativa_loader, 'semantic_search')}")
-            except Exception as e:
-                logger.error(f"[IntegratedValidator] Error creando NormativaLoader: {e}")
-                self.normativa_loader = None
+            # Generar cache key basado en contenido de fragmentos
+            cache_key = hash(tuple(normativa_fragments))
+
+            if use_normativa_cache and cache_key == IntegratedValidator._normativa_cache_key:
+                # Reutilizar loader del caché
+                self.normativa_loader = IntegratedValidator._normativa_cache.get('loader')
+                if self.normativa_loader:
+                    logger.info(f"[IntegratedValidator] ✅ Reutilizando NormativaLoader del caché ({len(normativa_fragments)} fragmentos)")
+
+            if not self.normativa_loader:
+                # Crear nuevo loader y guardarlo en caché
+                try:
+                    logger.info(f"[IntegratedValidator] Creando NormativaLoader con {len(normativa_fragments)} fragmentos")
+                    self.normativa_loader = create_loader_from_fragments(
+                        text_fragments=normativa_fragments,
+                        document_title="Reglamento Interior",
+                        use_embeddings=True,  # Habilitado para precisión semántica (fix v5.26)
+                        context=self.context
+                    )
+                    logger.info("[IntegratedValidator] NormativaLoader creado exitosamente")
+                    logger.info(f"[IntegratedValidator] embedding_mode: {self.normativa_loader.embedding_mode}")
+                    logger.info(f"[IntegratedValidator] semantic_search disponible: {hasattr(self.normativa_loader, 'semantic_search')}")
+
+                    # Guardar en caché
+                    if use_normativa_cache:
+                        IntegratedValidator._normativa_cache = {'loader': self.normativa_loader}
+                        IntegratedValidator._normativa_cache_key = cache_key
+                        logger.info("[IntegratedValidator] 💾 NormativaLoader guardado en caché para reutilización")
+                except Exception as e:
+                    logger.error(f"[IntegratedValidator] Error creando NormativaLoader: {e}")
+                    self.normativa_loader = None
 
         # Inicializar validadores LLM de v4
         self.verb_analyzer = VerbSemanticAnalyzer(context=self.context)
