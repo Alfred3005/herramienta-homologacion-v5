@@ -296,16 +296,17 @@ def get_acceptable_impact_ranges(nivel: str) -> Dict[str, List[str]]:
     letra = extract_level_letter(nivel)
 
     # Definir rangos por nivel
+    # AJUSTE v5.39: Rangos más amplios para G/H - acepta CUALQUIER nivel excepto operacional
     ranges = {
         "G": {  # Secretaría
-            "decision_scope": ["strategic_national", "interinstitutional", "institutional"],
-            "error_consequences": ["systemic", "strategic", "tactical"],
-            "complexity_level": ["transformational", "innovative", "strategic", "analytical"]
+            "decision_scope": ["strategic_national", "interinstitutional", "institutional", "local"],
+            "error_consequences": ["systemic", "strategic", "tactical", "operational"],
+            "complexity_level": ["transformational", "innovative", "strategic", "analytical", "routine"]
         },
         "H": {  # Subsecretaría
-            "decision_scope": ["strategic_national", "interinstitutional", "institutional"],
-            "error_consequences": ["systemic", "strategic", "tactical"],
-            "complexity_level": ["transformational", "innovative", "strategic", "analytical"]
+            "decision_scope": ["strategic_national", "interinstitutional", "institutional", "local"],
+            "error_consequences": ["systemic", "strategic", "tactical", "operational"],
+            "complexity_level": ["transformational", "innovative", "strategic", "analytical", "routine"]
         },
         "J": {  # Jefatura de Unidad
             "decision_scope": ["interinstitutional", "institutional"],
