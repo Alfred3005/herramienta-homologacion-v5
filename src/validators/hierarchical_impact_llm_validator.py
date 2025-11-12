@@ -4,7 +4,12 @@ Validador LLM de Impacto Jerárquico para Criterio 3
 Este módulo complementa el ImpactAnalyzer basado en reglas con análisis LLM
 para obtener mejor comprensión semántica del impacto y respaldo normativo.
 
-Versión: 5.34 (con LLM)
+MEJORAS v5.35:
+- Prompt adaptativo para niveles estratégicos (G/H/J/K)
+- Mayor tolerancia para funciones de coordinación/supervisión en niveles altos
+- Reconoce que niveles estratégicos pueden tener funciones tácticas legítimas
+
+Versión: 5.35 (con LLM tolerante para niveles estratégicos)
 Fecha: 2025-11-11
 """
 
@@ -180,6 +185,23 @@ class HierarchicalImpactLLMValidator:
     ) -> str:
         """Construye el prompt para análisis de impacto"""
 
+        # Determinar si es nivel estratégico
+        from src.config.verb_hierarchy import extract_level_letter
+        letra = extract_level_letter(nivel)
+        is_strategic = letra in ["G", "H", "J", "K"]
+
+        strategic_guidance = ""
+        if is_strategic:
+            strategic_guidance = """
+**IMPORTANTE - NIVEL ESTRATÉGICO:**
+Este puesto es de nivel estratégico (G/H/J/K). Para estos niveles:
+- Las funciones pueden combinar aspectos estratégicos con coordinación/supervisión
+- El alcance "institutional" o "interinstitutional" es apropiado (no requiere strategic_national en todas las funciones)
+- La complejidad "strategic" o "analytical" es apropiada
+- Las consecuencias "strategic" o "tactical" son apropiadas
+- Sé TOLERANTE: marca is_appropriate=true si la función tiene impacto estratégico o táctico razonable
+"""
+
         return f"""Eres un experto en análisis de puestos de la Administración Pública Federal mexicana.
 
 **TAREA:** Analiza el impacto jerárquico de esta función y determina si es apropiada para el nivel del puesto.
@@ -190,7 +212,7 @@ class HierarchicalImpactLLMValidator:
 - Alcance de decisiones: {expected_impact.get('decision_scope', 'N/A')}
 - Consecuencias de errores: {expected_impact.get('error_consequences', 'N/A')}
 - Complejidad: {expected_impact.get('complexity_level', 'N/A')}
-
+{strategic_guidance}
 **FUNCIÓN A ANALIZAR:**
 {funcion_text}
 

@@ -7,12 +7,17 @@ jerárquico del puesto, combinando:
 2. Coherencia de impacto (alcance, consecuencias, complejidad) CON LLM
 3. Validación normativa de discrepancias CON LLM
 
-Threshold: >50% funciones CRÍTICAS (sin respaldo) → FAIL
+Threshold DINÁMICO por nivel:
+- G/H (Secretaría/Subsecretaría): 75% tolerancia
+- J/K (Jefatura Unidad/DG Adjunto): 70% tolerancia
+- L/M/N (Direcciones): 60% tolerancia
+- O/P (Jefe Depto/Enlace): 50% tolerancia
+
 CRÍTICO: Discrepancia sin respaldo normativo
 MODERATE: Discrepancia con respaldo normativo
 
 Fecha: 2025-11-11
-Versión: 5.34 (con LLM para análisis de impacto)
+Versión: 5.35 (con threshold dinámico y LLM tolerante para niveles estratégicos)
 """
 
 import logging
@@ -51,19 +56,22 @@ class Criterion3Validator:
         normativa_fragments: Optional[List[str]] = None,
         threshold: float = 0.50,
         context: Optional[APFContext] = None,
-        use_llm: bool = True
+        use_llm: bool = True,
+        use_dynamic_threshold: bool = True
     ):
         """
         Inicializa el validador.
 
         Args:
             normativa_fragments: Fragmentos de normativa para búsqueda de respaldo
-            threshold: Umbral para fallar el criterio (default 50%)
+            threshold: Umbral base para fallar el criterio (default 50%)
             context: APFContext con API keys (requerido si use_llm=True)
             use_llm: Si True, usa LLM para análisis de impacto y búsqueda normativa
+            use_dynamic_threshold: Si True, ajusta threshold según nivel jerárquico
         """
         self.normativa_fragments = normativa_fragments or []
-        self.threshold = threshold
+        self.base_threshold = threshold
+        self.use_dynamic_threshold = use_dynamic_threshold
         self.analyzer = ImpactAnalyzer()  # Mantener como fallback
         self.use_llm = use_llm
         self.llm_validator = None
@@ -75,6 +83,43 @@ class Criterion3Validator:
             else:
                 self.llm_validator = HierarchicalImpactLLMValidator(context)
                 logger.info("[Criterio 3] Inicializado CON análisis LLM (GPT-4o-mini)")
+
+    def _get_threshold_for_level(self, nivel_salarial: str) -> float:
+        """
+        Calcula threshold dinámico según nivel jerárquico.
+
+        Niveles altos (G, H, J, K): más tolerancia (70-75%)
+        Niveles medios (L, M, N): normal (60%)
+        Niveles bajos (O, P): estricto (50%)
+
+        Args:
+            nivel_salarial: Código de nivel (ej: "M1", "G11")
+
+        Returns:
+            Threshold ajustado
+        """
+        if not self.use_dynamic_threshold:
+            return self.base_threshold
+
+        from src.config.verb_hierarchy import extract_level_letter
+        letra = extract_level_letter(nivel_salarial)
+
+        # Thresholds por nivel
+        level_thresholds = {
+            "G": 0.75,  # Secretaría: 75% tolerancia
+            "H": 0.75,  # Subsecretaría: 75% tolerancia
+            "J": 0.70,  # Jefatura de Unidad: 70% tolerancia
+            "K": 0.70,  # DG Adjunto: 70% tolerancia
+            "L": 0.60,  # Dirección General: 60% tolerancia
+            "M": 0.60,  # Dirección de Área: 60% tolerancia
+            "N": 0.60,  # Subdirección: 60% tolerancia
+            "O": 0.50,  # Jefe de Departamento: 50% (base)
+            "P": 0.50   # Enlace: 50% (base)
+        }
+
+        threshold = level_thresholds.get(letra, self.base_threshold)
+        logger.info(f"[Criterio 3] Threshold dinámico para nivel {nivel_salarial} ({letra}): {threshold:.0%}")
+        return threshold
 
     def validate(
         self,
@@ -94,6 +139,9 @@ class Criterion3Validator:
             Criterion3Result con el resultado de la validación
         """
         logger.info(f"[Criterio 3] Validando puesto {puesto_codigo} (nivel {nivel_salarial})")
+
+        # Obtener threshold dinámico para este nivel
+        threshold = self._get_threshold_for_level(nivel_salarial)
 
         # Obtener perfil esperado
         profile = get_level_profile(nivel_salarial)
@@ -123,8 +171,8 @@ class Criterion3Validator:
         total_functions = len(funciones)
         critical_rate = critical_count / total_functions if total_functions > 0 else 0.0
 
-        # Evaluar threshold
-        is_passing = critical_rate <= self.threshold
+        # Evaluar threshold (ahora dinámico)
+        is_passing = critical_rate <= threshold
 
         # Construir reasoning
         reasoning = self._build_reasoning(
@@ -142,7 +190,7 @@ class Criterion3Validator:
             functions_critical=critical_count,
             functions_moderate=moderate_count,
             critical_rate=critical_rate,
-            threshold=self.threshold,
+            threshold=threshold,
             function_analyses=function_analyses,
             confidence=self._calculate_confidence(critical_rate, is_passing),
             reasoning=reasoning
@@ -150,11 +198,11 @@ class Criterion3Validator:
 
         if is_passing:
             logger.info(
-                f"[Criterio 3] ✅ PASS - Tasa crítica: {critical_rate:.0%} ≤ {self.threshold:.0%}"
+                f"[Criterio 3] ✅ PASS - Tasa crítica: {critical_rate:.0%} ≤ {threshold:.0%}"
             )
         else:
             logger.warning(
-                f"[Criterio 3] ❌ FAIL - Tasa crítica: {critical_rate:.0%} > {self.threshold:.0%}"
+                f"[Criterio 3] ❌ FAIL - Tasa crítica: {critical_rate:.0%} > {threshold:.0%}"
             )
 
         return result
