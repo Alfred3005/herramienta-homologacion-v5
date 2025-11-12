@@ -4,7 +4,7 @@ Validador de Criterio 3: Apropiación de Impacto Jerárquico
 Evalúa si el impacto declarado en las funciones es coherente con el nivel
 jerárquico del puesto, combinando:
 1. Apropiación de verbos por nivel
-2. Coherencia de impacto (alcance, consecuencias, complejidad) CON LLM
+2. Coherencia de impacto usando RANGOS ACEPTABLES (no match exacto)
 3. Validación normativa de discrepancias CON LLM
 
 Threshold DINÁMICO por nivel:
@@ -13,11 +13,18 @@ Threshold DINÁMICO por nivel:
 - L/M/N (Direcciones): 60% tolerancia
 - O/P (Jefe Depto/Enlace): 50% tolerancia
 
+MEJORAS v5.37:
+- Rangos de impacto aceptables por nivel (no match exacto con perfil ideal)
+- Nivel G acepta: scope=[strategic_national, interinstitutional, institutional]
+- Nivel G acepta: consequences=[systemic, strategic, tactical]
+- Nivel G acepta: complexity=[transformational, innovative, strategic, analytical]
+- Lógica: función es APROPIADA si está DENTRO del rango (no requiere coincidencia exacta)
+
 CRÍTICO: Discrepancia sin respaldo normativo
 MODERATE: Discrepancia con respaldo normativo
 
 Fecha: 2025-11-11
-Versión: 5.35 (con threshold dinámico y LLM tolerante para niveles estratégicos)
+Versión: 5.37 (con rangos de impacto aceptables - filosofía de variedad legítima)
 """
 
 import logging
@@ -27,6 +34,7 @@ from dataclasses import dataclass
 from src.config.verb_hierarchy import (
     get_level_profile,
     get_expected_impact_profile,
+    get_acceptable_impact_ranges,
     is_verb_appropriate,
     is_verb_forbidden
 )
@@ -120,6 +128,33 @@ class Criterion3Validator:
         threshold = level_thresholds.get(letra, self.base_threshold)
         logger.info(f"[Criterio 3] Threshold dinámico para nivel {nivel_salarial} ({letra}): {threshold:.0%}")
         return threshold
+
+    def _is_impact_within_acceptable_range(
+        self,
+        detected_scope: str,
+        detected_consequences: str,
+        detected_complexity: str,
+        nivel: str
+    ) -> tuple[bool, bool, bool]:
+        """
+        Verifica si el impacto detectado está dentro del rango aceptable para el nivel.
+
+        Args:
+            detected_scope: Alcance detectado (ej: "institutional")
+            detected_consequences: Consecuencias detectadas (ej: "strategic")
+            detected_complexity: Complejidad detectada (ej: "analytical")
+            nivel: Nivel salarial (ej: "G11")
+
+        Returns:
+            Tupla (scope_ok, consequences_ok, complexity_ok)
+        """
+        acceptable_ranges = get_acceptable_impact_ranges(nivel)
+
+        scope_ok = detected_scope in acceptable_ranges.get("decision_scope", [])
+        consequences_ok = detected_consequences in acceptable_ranges.get("error_consequences", [])
+        complexity_ok = detected_complexity in acceptable_ranges.get("complexity_level", [])
+
+        return scope_ok, consequences_ok, complexity_ok
 
     def validate(
         self,
@@ -251,10 +286,18 @@ class Criterion3Validator:
             impact_consequences = llm_analysis.consequences_level
             impact_complexity = llm_analysis.complexity_level
 
-            # Coherencia basada en análisis LLM
-            scope_coherent = llm_analysis.is_appropriate_for_level
-            cons_coherent = llm_analysis.is_appropriate_for_level
-            complexity_coherent = llm_analysis.is_appropriate_for_level
+            # Verificar coherencia usando RANGOS ACEPTABLES en lugar de match exacto
+            scope_coherent, cons_coherent, complexity_coherent = self._is_impact_within_acceptable_range(
+                impact_scope,
+                impact_consequences,
+                impact_complexity,
+                nivel
+            )
+
+            logger.debug(
+                f"[Criterio 3] F{func_id} - Impacto: scope={impact_scope}({scope_coherent}), "
+                f"cons={impact_consequences}({cons_coherent}), comp={impact_complexity}({complexity_coherent})"
+            )
 
         else:
             # Fallback: usar ImpactAnalyzer basado en reglas

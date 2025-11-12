@@ -7,8 +7,13 @@ Pública Federal, incluyendo verbos apropiados/prohibidos y perfiles de impacto.
 NOTA: El campo 'budget_range' en impact_profile se mantiene por compatibilidad
 estructural, pero NO se usa en la lógica de decisión (decisión del equipo 2025-11-05).
 
-Fecha: 2025-11-05
-Versión: 5.0
+MEJORAS v5.37:
+- Nueva función get_acceptable_impact_ranges() que define rangos de impacto ACEPTABLES
+- Filosofía: No match exacto - permite variedad legítima de funciones por nivel
+- Ejemplo: Nivel G acepta scope=[strategic_national, interinstitutional, institutional]
+
+Fecha: 2025-11-11
+Versión: 5.37
 """
 
 from typing import Dict, List, Any, Optional
@@ -264,6 +269,82 @@ def get_expected_impact_profile(nivel: str) -> Dict[str, str]:
         "error_consequences": "operational",
         "complexity_level": "routine"
     })
+
+
+def get_acceptable_impact_ranges(nivel: str) -> Dict[str, List[str]]:
+    """
+    Obtiene los rangos de impacto ACEPTABLES para un nivel.
+
+    A diferencia de get_expected_impact_profile que retorna el perfil IDEAL,
+    esta función retorna TODOS los niveles de impacto que son APROPIADOS
+    para el nivel jerárquico.
+
+    Filosofía: Niveles altos pueden tener funciones con impacto variado.
+    No todas las funciones de un Secretario deben ser "strategic_national".
+
+    Args:
+        nivel: Código de nivel (ej: "G11", "M1")
+
+    Returns:
+        Dict con listas de valores aceptables para cada dimensión:
+        {
+            "decision_scope": ["strategic_national", "interinstitutional", ...],
+            "error_consequences": ["systemic", "strategic", ...],
+            "complexity_level": ["transformational", "strategic", ...]
+        }
+    """
+    letra = extract_level_letter(nivel)
+
+    # Definir rangos por nivel
+    ranges = {
+        "G": {  # Secretaría
+            "decision_scope": ["strategic_national", "interinstitutional", "institutional"],
+            "error_consequences": ["systemic", "strategic", "tactical"],
+            "complexity_level": ["transformational", "innovative", "strategic", "analytical"]
+        },
+        "H": {  # Subsecretaría
+            "decision_scope": ["strategic_national", "interinstitutional", "institutional"],
+            "error_consequences": ["systemic", "strategic", "tactical"],
+            "complexity_level": ["transformational", "innovative", "strategic", "analytical"]
+        },
+        "J": {  # Jefatura de Unidad
+            "decision_scope": ["interinstitutional", "institutional"],
+            "error_consequences": ["strategic", "tactical"],
+            "complexity_level": ["strategic", "analytical"]
+        },
+        "K": {  # DG Adjunto
+            "decision_scope": ["interinstitutional", "institutional"],
+            "error_consequences": ["strategic", "tactical"],
+            "complexity_level": ["strategic", "analytical"]
+        },
+        "L": {  # Dirección General
+            "decision_scope": ["institutional", "interinstitutional"],
+            "error_consequences": ["strategic", "tactical"],
+            "complexity_level": ["strategic", "analytical"]
+        },
+        "M": {  # Dirección de Área
+            "decision_scope": ["institutional", "local"],
+            "error_consequences": ["tactical", "operational"],
+            "complexity_level": ["analytical", "routine"]
+        },
+        "N": {  # Subdirección
+            "decision_scope": ["institutional", "local"],
+            "error_consequences": ["tactical", "operational"],
+            "complexity_level": ["analytical", "routine"]
+        },
+        "O": {  # Jefe de Departamento
+            "decision_scope": ["local"],
+            "error_consequences": ["operational", "tactical"],
+            "complexity_level": ["routine", "analytical"]
+        },
+        "P": {  # Enlace
+            "decision_scope": ["local"],
+            "error_consequences": ["operational"],
+            "complexity_level": ["routine"]
+        }
+    }
+
+    return ranges.get(letra, ranges["P"])
 
 
 def is_verb_appropriate(verbo: str, nivel: str) -> bool:

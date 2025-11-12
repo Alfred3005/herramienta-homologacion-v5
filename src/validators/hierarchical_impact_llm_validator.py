@@ -4,12 +4,15 @@ Validador LLM de Impacto Jerárquico para Criterio 3
 Este módulo complementa el ImpactAnalyzer basado en reglas con análisis LLM
 para obtener mejor comprensión semántica del impacto y respaldo normativo.
 
-MEJORAS v5.35:
-- Prompt adaptativo para niveles estratégicos (G/H/J/K)
-- Mayor tolerancia para funciones de coordinación/supervisión en niveles altos
-- Reconoce que niveles estratégicos pueden tener funciones tácticas legítimas
+MEJORAS v5.37:
+- Prompt con RANGOS DE IMPACTO ACEPTABLES específicos por nivel
+- No requiere match exacto con perfil ideal - acepta variedad legítima
+- Nivel G: acepta scope=[strategic_national, interinstitutional, institutional]
+- Nivel G: acepta consequences=[systemic, strategic, tactical]
+- Nivel G: acepta complexity=[transformational, innovative, strategic, analytical]
+- LLM informado de rangos válidos para evaluación más precisa
 
-Versión: 5.35 (con LLM tolerante para niveles estratégicos)
+Versión: 5.37 (con rangos de impacto aceptables - filosofía de variedad legítima)
 Fecha: 2025-11-11
 """
 
@@ -185,21 +188,24 @@ class HierarchicalImpactLLMValidator:
     ) -> str:
         """Construye el prompt para análisis de impacto"""
 
-        # Determinar si es nivel estratégico
-        from src.config.verb_hierarchy import extract_level_letter
+        # Determinar si es nivel estratégico y obtener rangos aceptables
+        from src.config.verb_hierarchy import extract_level_letter, get_acceptable_impact_ranges
         letra = extract_level_letter(nivel)
-        is_strategic = letra in ["G", "H", "J", "K"]
+        acceptable_ranges = get_acceptable_impact_ranges(nivel)
 
-        strategic_guidance = ""
-        if is_strategic:
-            strategic_guidance = """
-**IMPORTANTE - NIVEL ESTRATÉGICO:**
-Este puesto es de nivel estratégico (G/H/J/K). Para estos niveles:
-- Las funciones pueden combinar aspectos estratégicos con coordinación/supervisión
-- El alcance "institutional" o "interinstitutional" es apropiado (no requiere strategic_national en todas las funciones)
-- La complejidad "strategic" o "analytical" es apropiada
-- Las consecuencias "strategic" o "tactical" son apropiadas
-- Sé TOLERANTE: marca is_appropriate=true si la función tiene impacto estratégico o táctico razonable
+        # Construir guidance con rangos específicos
+        ranges_guidance = f"""
+**RANGOS DE IMPACTO ACEPTABLES PARA NIVEL {nivel} ({letra}):**
+
+La evaluación debe considerar que para este nivel son APROPIADOS los siguientes valores:
+
+- **Alcance (decision_scope)**: {', '.join(acceptable_ranges['decision_scope'])}
+- **Consecuencias (error_consequences)**: {', '.join(acceptable_ranges['error_consequences'])}
+- **Complejidad (complexity_level)**: {', '.join(acceptable_ranges['complexity_level'])}
+
+**IMPORTANTE**: Si la función tiene impacto dentro de CUALQUIERA de estos rangos, es APROPIADA.
+NO es necesario que coincida exactamente con el perfil ideal - los rangos reflejan la variedad
+legítima de funciones que puede tener un puesto de este nivel.
 """
 
         return f"""Eres un experto en análisis de puestos de la Administración Pública Federal mexicana.
@@ -208,11 +214,11 @@ Este puesto es de nivel estratégico (G/H/J/K). Para estos niveles:
 
 **NIVEL DEL PUESTO:** {nivel}
 
-**PERFIL DE IMPACTO ESPERADO PARA ESTE NIVEL:**
+**PERFIL DE IMPACTO IDEAL (referencia):**
 - Alcance de decisiones: {expected_impact.get('decision_scope', 'N/A')}
 - Consecuencias de errores: {expected_impact.get('error_consequences', 'N/A')}
 - Complejidad: {expected_impact.get('complexity_level', 'N/A')}
-{strategic_guidance}
+{ranges_guidance}
 **FUNCIÓN A ANALIZAR:**
 {funcion_text}
 
