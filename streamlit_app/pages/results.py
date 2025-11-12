@@ -70,8 +70,8 @@ def show():
     total_puestos = data['total_puestos']
     resultados = data['resultados']
 
-    aprobados = [r for r in resultados if r['validacion']['resultado'] in ['APROBADO_CON_OBSERVACIONES', 'APROBADO_PLENO']]
-    rechazados = [r for r in resultados if r['validacion']['resultado'] == 'RECHAZADO']
+    aprobados = [r for r in resultados if r.get('validacion', {}).get('resultado') in ['APROBADO_CON_OBSERVACIONES', 'APROBADO_PLENO']]
+    rechazados = [r for r in resultados if r.get('validacion', {}).get('resultado') == 'RECHAZADO']
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -97,7 +97,9 @@ def show():
         )
 
     with col4:
-        confianza_prom = sum(r['validacion']['confianza'] for r in resultados) / len(resultados)
+        # Calcular confianza promedio de manera segura
+        confianzas = [r['validacion'].get('confianza', 0.0) for r in resultados if 'confianza' in r.get('validacion', {})]
+        confianza_prom = sum(confianzas) / len(confianzas) if confianzas else 0.0
         st.metric(
             label="🎯 Confianza Promedio",
             value=f"{confianza_prom:.2f}"
@@ -136,8 +138,10 @@ def show():
             ('criterio_2_contextual', 'Contextual'),
             ('criterio_3_impacto', 'Impacto Jerárquico')
         ]:
-            pass_count = sum(1 for r in resultados if r['validacion']['criterios'][criterio_key]['resultado'] == 'PASS')
-            fail_count = sum(1 for r in resultados if r['validacion']['criterios'][criterio_key]['resultado'] == 'FAIL')
+            pass_count = sum(1 for r in resultados
+                           if r.get('validacion', {}).get('criterios', {}).get(criterio_key, {}).get('resultado') == 'PASS')
+            fail_count = sum(1 for r in resultados
+                           if r.get('validacion', {}).get('criterios', {}).get(criterio_key, {}).get('resultado') == 'FAIL')
 
             criterios_data['Criterio'].append(criterio_name)
             criterios_data['PASS'].append(pass_count)
@@ -160,16 +164,25 @@ def show():
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            c1_tasas = [r['validacion']['criterios']['criterio_1_verbos']['tasa_critica'] for r in resultados]
-            st.metric("Criterio 1 - Tasa Crítica Prom.", f"{sum(c1_tasas)/len(c1_tasas):.0%}")
+            c1_tasas = [r.get('validacion', {}).get('criterios', {}).get('criterio_1_verbos', {}).get('tasa_critica', 0)
+                       for r in resultados]
+            c1_tasas = [t for t in c1_tasas if t is not None]
+            c1_prom = sum(c1_tasas)/len(c1_tasas) if c1_tasas else 0
+            st.metric("Criterio 1 - Tasa Crítica Prom.", f"{c1_prom:.0%}")
 
         with col2:
-            c2_confianzas = [r['validacion']['criterios']['criterio_2_contextual']['alineacion']['confianza'] for r in resultados]
-            st.metric("Criterio 2 - Confianza Prom.", f"{sum(c2_confianzas)/len(c2_confianzas):.2f}")
+            c2_confianzas = [r.get('validacion', {}).get('criterios', {}).get('criterio_2_contextual', {}).get('alineacion', {}).get('confianza', 0)
+                            for r in resultados]
+            c2_confianzas = [c for c in c2_confianzas if c is not None]
+            c2_prom = sum(c2_confianzas)/len(c2_confianzas) if c2_confianzas else 0
+            st.metric("Criterio 2 - Confianza Prom.", f"{c2_prom:.2f}")
 
         with col3:
-            c3_tasas = [r['validacion']['criterios']['criterio_3_impacto']['metricas']['tasa_critica'] for r in resultados]
-            st.metric("Criterio 3 - Tasa Crítica Prom.", f"{sum(c3_tasas)/len(c3_tasas):.0%}")
+            c3_tasas = [r.get('validacion', {}).get('criterios', {}).get('criterio_3_impacto', {}).get('metricas', {}).get('tasa_critica', 0)
+                       for r in resultados]
+            c3_tasas = [t for t in c3_tasas if t is not None]
+            c3_prom = sum(c3_tasas)/len(c3_tasas) if c3_tasas else 0
+            st.metric("Criterio 3 - Tasa Crítica Prom.", f"{c3_prom:.0%}")
 
     with tab3:
         # Tabla detallada de puestos
@@ -177,24 +190,24 @@ def show():
 
         tabla_data = []
         for r in resultados:
-            puesto = r['puesto']
-            val = r['validacion']
-            c1 = val['criterios']['criterio_1_verbos']
-            c2 = val['criterios']['criterio_2_contextual']
-            c3 = val['criterios']['criterio_3_impacto']
+            puesto = r.get('puesto', {})
+            val = r.get('validacion', {})
+            c1 = val.get('criterios', {}).get('criterio_1_verbos', {})
+            c2 = val.get('criterios', {}).get('criterio_2_contextual', {})
+            c3 = val.get('criterios', {}).get('criterio_3_impacto', {})
 
             tabla_data.append({
-                'Código': puesto['codigo'],
-                'Denominación': puesto['denominacion'],
-                'Nivel': puesto.get('nivel', puesto.get('nivel_salarial', 'N/A')),  # Safe access v5.33
-                'Resultado': val['resultado'],
-                'Confianza': f"{val['confianza']:.2f}",
-                'C1 (Verbos)': c1['resultado'],
-                'C1 Tasa': f"{c1['tasa_critica']:.0%}",
-                'C2 (Context)': c2['resultado'],
-                'C2 Conf': f"{c2['alineacion']['confianza']:.2f}",
-                'C3 (Impacto)': c3['resultado'],
-                'C3 Tasa': f"{c3['metricas']['tasa_critica']:.0%}"
+                'Código': puesto.get('codigo', 'N/A'),
+                'Denominación': puesto.get('denominacion', 'N/A'),
+                'Nivel': puesto.get('nivel', puesto.get('nivel_salarial', 'N/A')),
+                'Resultado': val.get('resultado', 'N/A'),
+                'Confianza': f"{val.get('confianza', 0.0):.2f}",
+                'C1 (Verbos)': c1.get('resultado', 'N/A'),
+                'C1 Tasa': f"{c1.get('tasa_critica', 0):.0%}",
+                'C2 (Context)': c2.get('resultado', 'N/A'),
+                'C2 Conf': f"{c2.get('alineacion', {}).get('confianza', 0.0):.2f}",
+                'C3 (Impacto)': c3.get('resultado', 'N/A'),
+                'C3 Tasa': f"{c3.get('metricas', {}).get('tasa_critica', 0):.0%}"
             })
 
         df_detalle = pd.DataFrame(tabla_data)
@@ -305,7 +318,7 @@ def show():
     st.markdown("---")
     st.markdown("## 🔍 Explorar Puesto Individual")
 
-    puestos_dict = {f"{r['puesto']['codigo']} - {r['puesto']['denominacion']}": r for r in resultados}
+    puestos_dict = {f"{r.get('puesto', {}).get('codigo', 'N/A')} - {r.get('puesto', {}).get('denominacion', 'N/A')}": r for r in resultados}
     selected_puesto = st.selectbox(
         "Selecciona un puesto para ver detalles:",
         options=list(puestos_dict.keys())
@@ -313,20 +326,21 @@ def show():
 
     if selected_puesto:
         puesto_data = puestos_dict[selected_puesto]
-        puesto = puesto_data['puesto']
-        val = puesto_data['validacion']
+        puesto = puesto_data.get('puesto', {})
+        val = puesto_data.get('validacion', {})
 
-        st.markdown(f"### {puesto['denominacion']}")
-        st.markdown(f"**Código:** {puesto['codigo']} | **Nivel:** {puesto.get('nivel', puesto.get('nivel_salarial', 'N/A'))}")
+        st.markdown(f"### {puesto.get('denominacion', 'N/A')}")
+        st.markdown(f"**Código:** {puesto.get('codigo', 'N/A')} | **Nivel:** {puesto.get('nivel', puesto.get('nivel_salarial', 'N/A'))}")
 
         # Resultado general
-        if val['resultado'] in ['APROBADO_CON_OBSERVACIONES', 'APROBADO_PLENO']:
-            st.success(f"✅ {val['resultado']}")
+        resultado = val.get('resultado', 'N/A')
+        if resultado in ['APROBADO_CON_OBSERVACIONES', 'APROBADO_PLENO']:
+            st.success(f"✅ {resultado}")
         else:
-            st.error(f"❌ {val['resultado']}")
+            st.error(f"❌ {resultado}")
 
-        st.markdown(f"**Confianza Global:** {val['confianza']:.2f}")
-        st.markdown(f"**Criterios Aprobados:** {val['criterios_aprobados']}/3")
+        st.markdown(f"**Confianza Global:** {val.get('confianza', 0.0):.2f}")
+        st.markdown(f"**Criterios Aprobados:** {val.get('criterios_aprobados', 0)}/3")
 
         # Detalles por criterio
         st.markdown("#### 📊 Detalles por Criterio")
@@ -334,42 +348,42 @@ def show():
         c1, c2, c3 = st.columns(3)
 
         with c1:
-            c1_data = val['criterios']['criterio_1_verbos']
+            c1_data = val.get('criterios', {}).get('criterio_1_verbos', {})
             with st.container():
                 st.markdown("**Criterio 1: Verbos Débiles**")
-                if c1_data['resultado'] == 'PASS':
+                if c1_data.get('resultado') == 'PASS':
                     st.success("✅ PASS")
                 else:
                     st.error("❌ FAIL")
-                st.metric("Tasa Crítica", f"{c1_data['tasa_critica']:.0%}")
-                st.caption(f"Rechazadas: {c1_data['funciones_rechazadas']}/{c1_data['total_funciones']}")
+                st.metric("Tasa Crítica", f"{c1_data.get('tasa_critica', 0):.0%}")
+                st.caption(f"Rechazadas: {c1_data.get('funciones_rechazadas', 0)}/{c1_data.get('total_funciones', 0)}")
 
         with c2:
-            c2_data = val['criterios']['criterio_2_contextual']
+            c2_data = val.get('criterios', {}).get('criterio_2_contextual', {})
             with st.container():
                 st.markdown("**Criterio 2: Contextual**")
-                if c2_data['resultado'] == 'PASS':
+                if c2_data.get('resultado') == 'PASS':
                     st.success("✅ PASS")
                 else:
                     st.error("❌ FAIL")
-                st.metric("Confianza", f"{c2_data['alineacion']['confianza']:.2f}")
-                st.caption(f"Alineación: {c2_data['alineacion']['clasificacion']}")
+                st.metric("Confianza", f"{c2_data.get('alineacion', {}).get('confianza', 0.0):.2f}")
+                st.caption(f"Alineación: {c2_data.get('alineacion', {}).get('clasificacion', 'N/A')}")
 
         with c3:
-            c3_data = val['criterios']['criterio_3_impacto']
+            c3_data = val.get('criterios', {}).get('criterio_3_impacto', {})
             with st.container():
                 st.markdown("**Criterio 3: Impacto**")
-                if c3_data['resultado'] == 'PASS':
+                if c3_data.get('resultado') == 'PASS':
                     st.success("✅ PASS")
                 else:
                     st.error("❌ FAIL")
-                st.metric("Tasa Crítica", f"{c3_data['metricas']['tasa_critica']:.0%}")
-                st.caption(f"Critical: {c3_data['metricas'].get('funciones_critical', 0)}")
+                st.metric("Tasa Crítica", f"{c3_data.get('metricas', {}).get('tasa_critica', 0):.0%}")
+                st.caption(f"Critical: {c3_data.get('metricas', {}).get('funciones_critical', 0)}")
 
         # Razonamiento
         with st.expander("📝 Ver Razonamiento Detallado"):
-            st.markdown(val['razonamiento'])
-            st.markdown(f"**Acción Requerida:** {val['accion_requerida']}")
+            st.markdown(val.get('razonamiento', 'N/A'))
+            st.markdown(f"**Acción Requerida:** {val.get('accion_requerida', 'N/A')}")
 
 if __name__ == "__main__":
     show()
