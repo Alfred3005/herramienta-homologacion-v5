@@ -668,7 +668,7 @@ def execute_analysis():
         st.error("❌ No se ha cargado el archivo de normativa")
         return
 
-    st.info("🔄 Iniciando análisis con sistema de validación v5.34 (Criterio 3 con LLM + GPT-4o-mini)...")
+    st.info("🔄 Iniciando análisis con sistema de validación v5.41 (Sistema Jerárquico de Herencia Normativa)...")
 
     try:
         # Importar validador
@@ -979,9 +979,10 @@ def execute_analysis():
         ✅ **Análisis completado exitosamente**
 
         - Puestos analizados: **{len(resultados)}**
-        - Sistema: **v5.34** con Criterio 3 usando LLM (GPT-4o-mini)
+        - Sistema: **v5.41** - Sistema Jerárquico de Herencia Normativa
         - Modelo LLM: **GPT-4o-mini** (ahorro 94.6% vs GPT-4o)
-        - Criterios aplicados: **3** (Análisis Semántico, Contextual, Impacto de Grupo Jerárquico con LLM)
+        - Criterios aplicados: **3** (Análisis Semántico, Contextual con Jerarquía, Impacto de Grupo Jerárquico con LLM)
+        - Mejora Criterio 2: Análisis función por función con 4 niveles de herencia (directa, jefe directo, lejana, no alineada)
         - Validaciones adicionales: Duplicados, Malformadas, Marco Legal, Objetivo
         - Matriz de decisión: **2-of-3**
         """)

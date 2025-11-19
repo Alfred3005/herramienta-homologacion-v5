@@ -3,8 +3,8 @@ Validador Integrado - Sistema Completo de 3 Criterios
 
 Orquesta la validación completa de un puesto usando:
 - Criterio 1: Congruencia de Verbos Débiles (CON LLM)
-- Criterio 2: Validación Contextual (Referencias Institucionales CON LLM)
-- Criterio 3: Apropiación de Impacto Jerárquico
+- Criterio 2: Validación Contextual (Referencias Institucionales CON LLM) - VERSIÓN 5.41
+- Criterio 3: Apropiación de Impacto de Grupo Jerárquico
 
 Decisión Final: Matriz 2-of-3
 
@@ -17,8 +17,20 @@ normativa, el loader (con embeddings) se reutiliza automáticamente, evitando:
 
 Ahorro estimado: 80-90% del tiempo de inicialización en análisis múltiples.
 
-Fecha: 2025-11-11
-Versión: 5.38 - Con caché de normativa para análisis múltiples
+MEJORAS v5.41 - Sistema Jerárquico de Herencia Normativa:
+Criterio 2 ahora incluye:
+- Identificación inteligente de instituciones (sin hardcoding)
+- Sistema de 4 niveles de alineación jerárquica con scores granulares:
+  * NIVEL 1: Alineación Directa (Score: 0.9) - Mismo grupo jerárquico
+  * NIVEL 2: Herencia del Jefe Directo (Score: 0.75) - Un nivel arriba
+  * NIVEL 3: Herencia Lejana en Organismo (Score: 0.55) - Varios niveles arriba
+  * NIVEL 4: No Alineado (Score: 0.0) - Fuera del marco del organismo
+- Análisis función por función con distancia jerárquica
+- Diferenciación entre herencia directa, del jefe directo, y lejana
+- Identificación de grupo jerárquico del puesto y mapeo a normativa
+
+Fecha: 2025-11-19
+Versión: 5.41 - Sistema Jerárquico de Herencia Normativa
 """
 
 import logging
@@ -423,7 +435,8 @@ class IntegratedValidator:
                 institutional_references_match=validation_result.institutional_references_match,
                 alignment_classification=alignment,
                 alignment_confidence=validation_result.confidence,
-                reasoning=validation_result.reasoning or f"Análisis LLM: {alignment}"
+                reasoning=validation_result.reasoning or f"Análisis LLM: {alignment}",
+                detailed_analysis=validation_result.detailed_analysis  # v5.41: Incluir análisis detallado
             )
 
         except Exception as e:
@@ -484,16 +497,18 @@ class IntegratedValidator:
 
     def _format_criterion_2(self, criterion: Criterion2Result, quality_result=None) -> Dict[str, Any]:
         """
-        Formatea resultado de Criterio 2 para JSON con máxima transparencia (v5.33+).
+        Formatea resultado de Criterio 2 para JSON con máxima transparencia.
 
-        Incluye razonamiento LLM, evidencias, flags y validaciones adicionales de calidad
-        (marco legal, objetivo general).
+        VERSIÓN 5.41: Incluye análisis función por función con 4 niveles de herencia jerárquica.
+
+        Incluye razonamiento LLM, evidencias, flags, validaciones adicionales de calidad
+        (marco legal, objetivo general), y análisis detallado función por función.
         """
         result = {
             # ========== RESULTADO ==========
             "resultado": criterion.result.value,
 
-            # ========== ANÁLISIS DE REFERENCIAS INSTITUCIONALES ==========
+            # ========== ANÁLISIS DE REFERENCIAS INSTITUCIONALES v5.41 ==========
             "referencias_institucionales": {
                 "coinciden": criterion.institutional_references_match,
                 "explicacion": "Organismos/secretarías mencionadas en puesto coinciden con normativa proporcionada"
@@ -501,7 +516,7 @@ class IntegratedValidator:
 
             # ========== ANÁLISIS DE ALINEACIÓN ==========
             "alineacion": {
-                "clasificacion": criterion.alignment_classification,  # ALIGNED, PARTIALLY_ALIGNED, NOT_ALIGNED
+                "clasificacion": criterion.alignment_classification,  # STRONGLY_ALIGNED, ALIGNED, PARTIALLY_ALIGNED, NOT_ALIGNED
                 "confianza": round(criterion.alignment_confidence, 2),
                 "respaldo_jerarquico": criterion.has_hierarchical_backing,
                 "explicacion_respaldo": "Funciones derivables de atribuciones del jefe directo" if criterion.has_hierarchical_backing else "No aplica o no detectado"
@@ -535,6 +550,28 @@ class IntegratedValidator:
                 for flag in criterion.flags_detected
             ] if criterion.flags_detected else []
         }
+
+        # ========== ANÁLISIS DETALLADO v5.41 (FUNCIÓN POR FUNCIÓN) ==========
+        if criterion.detailed_analysis:
+            detailed = criterion.detailed_analysis
+
+            # Información de organismos identificados
+            if "organismo_puesto" in detailed:
+                result["organismo_puesto"] = detailed["organismo_puesto"]
+            if "organismo_normativa" in detailed:
+                result["organismo_normativa"] = detailed["organismo_normativa"]
+
+            # Grupo jerárquico del puesto
+            if "grupo_jerarquico_puesto" in detailed:
+                result["grupo_jerarquico_puesto"] = detailed["grupo_jerarquico_puesto"]
+
+            # Análisis función por función con niveles de herencia
+            if "analisis_funciones" in detailed and detailed["analisis_funciones"]:
+                result["analisis_funciones"] = detailed["analisis_funciones"]
+
+            # Resumen de alineación
+            if "resumen_alineacion" in detailed:
+                result["resumen_alineacion"] = detailed["resumen_alineacion"]
 
         # AGREGAR VALIDACIONES ADICIONALES DE CALIDAD (v5.33+)
         if quality_result:

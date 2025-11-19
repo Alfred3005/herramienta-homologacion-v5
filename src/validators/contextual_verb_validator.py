@@ -3,16 +3,33 @@
 CONTEXTUAL VERB VALIDATOR - Validación Inteligente de Verbos con LLM
 Sistema de validación con dos modos: HÍBRIDO (rápido) y COMPLETO (detallado)
 
+VERSIÓN 5.41 - Sistema Jerárquico de Herencia Normativa
+Mejoras implementadas:
+- Identificación inteligente de instituciones (sin hardcoding)
+- Sistema de 4 niveles de alineación jerárquica con scores granulares
+- Análisis función por función con distancia jerárquica
+- Diferenciación entre herencia directa, del jefe directo, y lejana
+
+NIVELES DE ALINEACIÓN:
+- NIVEL 1: Alineación Directa (Score: 0.9) - Mismo grupo jerárquico
+- NIVEL 2: Herencia del Jefe Directo (Score: 0.75) - Un nivel arriba
+- NIVEL 3: Herencia Lejana en Organismo (Score: 0.55) - Varios niveles arriba
+- NIVEL 4: No Alineado (Score: 0.0) - Fuera del marco del organismo
+
 MODO HÍBRIDO:
 - Validación de umbrales (cantidad de verbos débiles)
 - 1 llamada LLM global que valida TODO el puesto vs normativa
+- Análisis granular función por función
 - Rápido y económico
 
 MODO COMPLETO:
 - Validación función por función con contexto normativo
-- Validación de herencia jerárquica
+- Validación de herencia jerárquica detallada
 - Validación de apropiación de alcance por nivel
 - Máxima precisión
+
+Fecha: 2025-11-19
+Versión: 5.41 - Sistema Jerárquico de Herencia Normativa
 """
 
 import json
@@ -40,8 +57,43 @@ VALIDATION_CONFIG = {
 
     # Configuración LLM
     "llm_temperature": 0.0,  # Determinístico
-    "llm_max_tokens": 1500,
+    "llm_max_tokens": 2000,  # Aumentado para respuesta más detallada
     "use_cache": True
+}
+
+# ==========================================
+# NIVELES DE ALINEACIÓN JERÁRQUICA (v5.41)
+# ==========================================
+
+ALIGNMENT_LEVELS = {
+    "NIVEL_1_ALINEACION_DIRECTA": {
+        "score": 0.9,
+        "descripcion": "Atribución encontrada EXPLÍCITAMENTE en la sección del MISMO grupo jerárquico",
+        "distancia_jerarquica": 0,
+        "tipo_herencia": "DIRECTA",
+        "clasificacion": "STRONGLY_ALIGNED"
+    },
+    "NIVEL_2_HERENCIA_JEFE_DIRECTO": {
+        "score": 0.75,
+        "descripcion": "Atribución derivable del JEFE INMEDIATO SUPERIOR (un nivel arriba)",
+        "distancia_jerarquica": 1,
+        "tipo_herencia": "DIRECTA",
+        "clasificacion": "ALIGNED"
+    },
+    "NIVEL_3_HERENCIA_LEJANA": {
+        "score": 0.55,
+        "descripcion": "Atribución dentro del MARCO general del organismo (varios niveles arriba)",
+        "distancia_jerarquica": 2,  # 2 o más
+        "tipo_herencia": "LEJANA",
+        "clasificacion": "PARTIALLY_ALIGNED"
+    },
+    "NIVEL_4_NO_ALINEADO": {
+        "score": 0.0,
+        "descripcion": "Atribución fuera del marco del organismo",
+        "distancia_jerarquica": None,
+        "tipo_herencia": "NONE",
+        "clasificacion": "NOT_ALIGNED"
+    }
 }
 
 # Jerarquía de alcance de verbos (de menor a mayor)
@@ -72,9 +124,12 @@ NIVEL_TO_ALCANCE = {
 
 @dataclass
 class GlobalValidationResult:
-    """Resultado de validación global (modo híbrido)"""
+    """Resultado de validación global (modo híbrido)
+
+    VERSIÓN 5.41: Incluye análisis detallado función por función con 4 niveles de herencia
+    """
     is_aligned: bool  # ¿Está alineado con normativa?
-    alignment_level: str  # "ALIGNED" | "PARTIALLY_ALIGNED" | "NOT_ALIGNED"
+    alignment_level: str  # "ALIGNED" | "PARTIALLY_ALIGNED" | "NOT_ALIGNED" | "STRONGLY_ALIGNED"
     confidence: float  # 0.0 - 1.0
     reasoning: str  # Justificación del LLM
 
@@ -88,9 +143,12 @@ class GlobalValidationResult:
     structural_issues: List[str] = field(default_factory=list)
     normativa_mismatches: List[str] = field(default_factory=list)
 
-    # Validación de referencias institucionales (nuevos campos)
+    # Validación de referencias institucionales (campos v4)
     institutional_references_match: bool = True  # ¿Referencias institucionales coinciden?
     has_hierarchical_backing: bool = False  # ¿Hay herencia jerárquica válida?
+
+    # Análisis detallado (v5.41) - Incluye análisis función por función
+    detailed_analysis: Optional[Dict[str, Any]] = None  # LLM result completo con analisis_funciones
 
     # Metadatos
     validation_timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -198,41 +256,42 @@ class ContextualVerbValidator:
             nivel_jerarquico=nivel_jerarquico
         )
 
-        # PASO 3: Consolidar resultado con validación estricta
+        # PASO 3: Consolidar resultado con validación estricta (v5.41)
 
-        # Verificar referencias institucionales
-        institutional_match = llm_result.get("institutional_references_match", True)
+        # Extraer datos del nuevo formato con resumen_alineacion
+        resumen = llm_result.get("resumen_alineacion", {})
+        institutional_match = llm_result.get("instituciones_coinciden", True)
         has_hierarchical_backing = llm_result.get("has_hierarchical_backing", False)
 
-        # Si falla umbrales O LLM dice NOT_ALIGNED → NOT_ALIGNED
-        if structural_issues or llm_result["alignment_level"] == "NOT_ALIGNED":
+        # Usar clasificacion_global del resumen (calculado por LLM basado en scores de funciones)
+        clasificacion_global = resumen.get("clasificacion_global", llm_result.get("alignment_level", "NOT_ALIGNED"))
+        score_promedio = resumen.get("score_promedio", 0.0)
+        confianza = resumen.get("confianza", llm_result.get("confidence", 0.5))
+
+        # Si falla umbrales O instituciones no coinciden O clasificacion es NOT_ALIGNED → NOT_ALIGNED
+        if structural_issues or not institutional_match or clasificacion_global == "NOT_ALIGNED":
             alignment_level = "NOT_ALIGNED"
             is_aligned = False
 
-        # PARTIALLY_ALIGNED: Solo aprobar si hay respaldo institucional o jerárquico válido
-        elif llm_result["alignment_level"] == "PARTIALLY_ALIGNED":
+            # Añadir contexto si fue por falta de coincidencia institucional
+            if not institutional_match and "reasoning" in llm_result:
+                llm_result["reasoning"] += " [RECHAZADO: Organismos no coinciden]"
+
+        # PARTIALLY_ALIGNED: Aprobar con observaciones
+        elif clasificacion_global == "PARTIALLY_ALIGNED":
             alignment_level = "PARTIALLY_ALIGNED"
+            is_aligned = True  # Pasa con observaciones (score_promedio >= 0.55)
 
-            # Rechazar PARTIALLY_ALIGNED si:
-            # 1. Las referencias institucionales NO coinciden (organismos/documentos diferentes)
-            # 2. NO hay respaldo jerárquico válido comprobado por LLM
-            if not institutional_match and not has_hierarchical_backing:
-                alignment_level = "NOT_ALIGNED"
-                is_aligned = False
-                # Actualizar reasoning para explicar el rechazo
-                llm_result["reasoning"] += " [RECHAZADO: Referencias institucionales no coinciden con normativa proporcionada y sin herencia jerárquica válida]"
-            else:
-                is_aligned = True  # Pasa con observaciones solo si cumple criterios
-
-        else:  # ALIGNED
-            alignment_level = "ALIGNED"
+        # ALIGNED o STRONGLY_ALIGNED
+        else:
+            alignment_level = clasificacion_global  # Puede ser "ALIGNED" o "STRONGLY_ALIGNED"
             is_aligned = True
 
         return GlobalValidationResult(
             is_aligned=is_aligned,
             alignment_level=alignment_level,
-            confidence=llm_result["confidence"],
-            reasoning=llm_result["reasoning"],
+            confidence=confianza,
+            reasoning=llm_result.get("reasoning", "Sin razonamiento disponible"),
             weak_verbs_count=weak_verbs_count,
             weak_verbs_threshold_passed=weak_verbs_pass,
             completeness_rate=completeness_rate,
@@ -240,7 +299,8 @@ class ContextualVerbValidator:
             structural_issues=structural_issues,
             normativa_mismatches=llm_result.get("normativa_mismatches", []),
             institutional_references_match=institutional_match,
-            has_hierarchical_backing=has_hierarchical_backing
+            has_hierarchical_backing=has_hierarchical_backing,
+            detailed_analysis=llm_result  # v5.41: Incluir análisis completo con analisis_funciones
         )
 
     def _validate_with_llm_global(
@@ -268,93 +328,220 @@ class ContextualVerbValidator:
 
         prompt = f"""Eres un experto en análisis de descripciones de puestos de la Administración Pública Federal (APF).
 
-TAREA: Evalúa si este puesto está ALINEADO con la normativa ESPECÍFICA que se te proporciona.
+VERSIÓN 5.41 - Sistema Jerárquico de Herencia Normativa
+Tu tarea es evaluar CADA FUNCIÓN individualmente usando un sistema de 4 niveles de alineación jerárquica.
 
+═══════════════════════════════════════════════════════════════
 PUESTO A EVALUAR:
-- NOMBRE DEL PUESTO: {puesto_nombre}
-- Nivel jerárquico: {nivel_jerarquico}
-- Objetivo general: {objetivo_general}
+═══════════════════════════════════════════════════════════════
+- NOMBRE: {puesto_nombre}
+- NIVEL JERÁRQUICO: {nivel_jerarquico}
+- OBJETIVO GENERAL: {objetivo_general}
 
-FUNCIONES ({len(funciones)} total):
+FUNCIONES A EVALUAR ({len(funciones)} total):
 {funciones_text}
 
+═══════════════════════════════════════════════════════════════
 NORMATIVA APLICABLE:
+═══════════════════════════════════════════════════════════════
 {normativa_context}
 
-INSTRUCCIONES - Evalúa con PRAGMATISMO:
+═══════════════════════════════════════════════════════════════
+INSTRUCCIONES DE EVALUACIÓN - SISTEMA DE 4 NIVELES
+═══════════════════════════════════════════════════════════════
 
-PASO 1 - **IDENTIFICACIÓN DEL ORGANISMO DEL PUESTO** (CRÍTICO):
-   Analiza el NOMBRE DEL PUESTO para identificar el organismo:
+PASO 1 - IDENTIFICACIÓN INTELIGENTE DE ORGANISMOS:
+─────────────────────────────────────────────────────────────
+A) IDENTIFICAR ORGANISMO DEL PUESTO:
+   - Analiza el NOMBRE del puesto
+   - Analiza OBJETIVO GENERAL y FUNCIONES
+   - Extrae el nombre completo del organismo/dependencia
+   - Extrae siglas si están presentes
+   - Ejemplos: "Secretaría de...", "Comisión Nacional de...", "Instituto de..."
 
-   Ejemplos de identificación correcta:
-   - "SECRETARIA(O) ANTICORRUPCION Y BUEN GOBIERNO" → Organismo: SABG (Secretaría de Anticorrupción y Buen Gobierno)
-   - "COORDINADOR(A) GENERAL DE BUEN GOBIERNO" → Organismo: SABG (es un cargo dentro de SABG)
-   - "TITULAR DE LA UNIDAD DE PARTICIPACION SOCIAL..." → Analiza el contexto, si menciona SABG → Organismo: SABG
-   - "COMISIONADO NACIONAL DE ACUACULTURA Y PESCA" → Organismo: CONAPESCA
-   - "DIRECTOR EN CONAPESCA" → Organismo: CONAPESCA
+B) IDENTIFICAR ORGANISMO DE LA NORMATIVA:
+   - Analiza títulos de documentos normativos
+   - Analiza primeros artículos (objeto, ámbito)
+   - Extrae el nombre completo del organismo
+   - Extrae siglas si están presentes
 
-   Reglas de identificación:
-   a) Si el nombre contiene "ANTICORRUPCION" o "BUEN GOBIERNO" → Organismo: SABG
-   b) Si el nombre contiene "CONAPESCA" o "ACUACULTURA Y PESCA" → Organismo: CONAPESCA
-   c) Si el nombre contiene "SECRETARIA DE..." → Identifica la secretaría específica
-   d) Para cargos medios/bajos (Coordinador, Director, Jefe, Titular): Busca referencias al organismo en objetivo/funciones
+C) VALIDACIÓN DE COINCIDENCIA:
+   ✅ SI COINCIDEN → Continuar con análisis de funciones
+   ❌ SI NO COINCIDEN → Resultado automático: NOT_ALIGNED
 
-PASO 2 - **VALIDACIÓN DE REFERENCIAS INSTITUCIONALES** (CRITERIO PRINCIPAL):
-   - Identifica el organismo de la NORMATIVA PROPORCIONADA (busca en título, fragmentos)
-   - PREGUNTA CRÍTICA: ¿El organismo del puesto (identificado en PASO 1) coincide con el organismo de la normativa?
-   - CRITERIO DE RECHAZO ABSOLUTO: Si son organismos DIFERENTES → NOT_ALIGNED inmediatamente
+PASO 2 - IDENTIFICACIÓN DEL GRUPO JERÁRQUICO DEL PUESTO:
+─────────────────────────────────────────────────────────────
+Identifica el GRUPO JERÁRQUICO específico del puesto:
+- Ejemplos: "Secretario", "Subsecretario", "Director General", "Director de Área",
+  "Subdirector de Área", "Jefe de Departamento", "Enlace", etc.
+- Busca en la normativa la sección de atribuciones de este grupo específico
 
-   Ejemplos correctos:
-   - Puesto SABG vs Normativa SABG → ✅ Coinciden, continuar evaluación
-   - Puesto CONAPESCA vs Normativa CONAPESCA → ✅ Coinciden, continuar evaluación
+PASO 3 - ANÁLISIS FUNCIÓN POR FUNCIÓN CON 4 NIVELES:
+─────────────────────────────────────────────────────────────
+Evalúa CADA función individualmente y clasifícala en uno de estos 4 niveles:
 
-   Ejemplos incorrectos:
-   - Puesto SABG vs Normativa CONAPESCA → ❌ NO COINCIDEN → NOT_ALIGNED
-   - Puesto CONAPESCA vs Normativa SABG → ❌ NO COINCIDEN → NOT_ALIGNED
+┌─────────────────────────────────────────────────────────────┐
+│ NIVEL 1: ALINEACIÓN DIRECTA (Score: 0.9)                   │
+├─────────────────────────────────────────────────────────────┤
+│ Criterio: La función está EXPLÍCITAMENTE en la sección     │
+│          del MISMO grupo jerárquico del puesto             │
+│                                                             │
+│ Ejemplo: Puesto "Subdirector de Área"                      │
+│          Normativa: "Artículo 25. Los Subdirectores de     │
+│                     Área tendrán las atribuciones..."      │
+│          Coincidencia: EXACTA en mismo grupo               │
+│                                                             │
+│ Campos JSON:                                                │
+│   - nivel: "NIVEL_1_ALINEACION_DIRECTA"                    │
+│   - clasificacion: "STRONGLY_ALIGNED"                       │
+│   - score: 0.9                                              │
+│   - distancia_jerarquica: 0                                │
+│   - tipo_herencia: "DIRECTA"                               │
+└─────────────────────────────────────────────────────────────┘
 
-PASO 3 - **VERIFICACIÓN DE ALINEACIÓN FUNCIONAL** (CRITERIO FLEXIBLE):
-   Solo aplica si PASO 2 es exitoso (organismos coinciden):
-   - Tienes acceso a FRAGMENTOS RELEVANTES del contenido normativo
-   - Las funciones pueden estar:
-     * EXPLÍCITAMENTE mencionadas en fragmentos
-     * DERIVADAS o RELACIONADAS con atribuciones del organismo
-     * En el ÁMBITO DE COMPETENCIA del organismo según la normativa
-   - ACEPTA: Funciones razonables para el organismo aunque no sean idénticas al texto normativo
-   - ACEPTA: Derivaciones lógicas de atribuciones generales del organismo
-   - RECHAZA: Funciones que NO tienen relación con el ámbito del organismo
+┌─────────────────────────────────────────────────────────────┐
+│ NIVEL 2: HERENCIA DEL JEFE DIRECTO (Score: 0.75)          │
+├─────────────────────────────────────────────────────────────┤
+│ Criterio: La función es DERIVABLE de atribuciones del      │
+│          JEFE INMEDIATO SUPERIOR (un nivel arriba)         │
+│                                                             │
+│ Ejemplo: Puesto "Subdirector de Área"                      │
+│          Normativa: "Artículo 23. Los Directores de Área   │
+│                     tendrán la atribución de coordinar..." │
+│          La función del Subdirector "elaborar programas"   │
+│          es operativa/técnica que APOYA la "coordinación"  │
+│          estratégica del Director (su jefe directo)        │
+│                                                             │
+│ Validación:                                                 │
+│   - Hay relación funcional jefe→subordinado                │
+│   - La función subordinada es más operativa/técnica        │
+│   - La función superior es más estratégica/directiva       │
+│                                                             │
+│ Campos JSON:                                                │
+│   - nivel: "NIVEL_2_HERENCIA_JEFE_DIRECTO"                 │
+│   - clasificacion: "ALIGNED"                                │
+│   - score: 0.75                                             │
+│   - distancia_jerarquica: 1                                │
+│   - tipo_herencia: "DIRECTA"                               │
+│   - grupo_encontrado: "Director de Área" (el jefe)        │
+└─────────────────────────────────────────────────────────────┘
 
-PASO 4 - **HERENCIA JERÁRQUICA** (CRITERIO ADICIONAL):
-   - Para puestos de niveles inferiores: ¿Estas funciones podrían ser delegadas del superior?
-   - Para puestos de alto nivel: ¿Estas funciones son coherentes con la dirección del organismo?
-   - Documenta si existe herencia jerárquica válida en el campo has_hierarchical_backing
+┌─────────────────────────────────────────────────────────────┐
+│ NIVEL 3: HERENCIA LEJANA EN ORGANISMO (Score: 0.55)       │
+├─────────────────────────────────────────────────────────────┤
+│ Criterio: La función está en el MARCO GENERAL del          │
+│          organismo pero sin cadena directa de herencia     │
+│          (2 o más niveles de distancia)                    │
+│                                                             │
+│ Ejemplo: Puesto "Subdirector de Área"                      │
+│          Normativa: "Artículo 5. El Secretario tiene la    │
+│                     atribución de establecer políticas..." │
+│          La función del Subdirector "proponer indicadores" │
+│          está relacionada con políticas pero hay 3 niveles │
+│          de distancia (Subdirector→Director→Subsecretario  │
+│          →Secretario)                                      │
+│                                                             │
+│ Validación:                                                 │
+│   - Función dentro del ámbito del organismo                │
+│   - NO hay cadena clara jefe→subordinado                   │
+│   - Distancia jerárquica: 2 o más niveles                  │
+│                                                             │
+│ Campos JSON:                                                │
+│   - nivel: "NIVEL_3_HERENCIA_LEJANA"                       │
+│   - clasificacion: "PARTIALLY_ALIGNED"                      │
+│   - score: 0.55                                             │
+│   - distancia_jerarquica: 2 (o más)                       │
+│   - tipo_herencia: "LEJANA"                                │
+│   - grupo_encontrado: "Secretario" (lejano en jerarquía)  │
+└─────────────────────────────────────────────────────────────┘
 
-PASO 5 - **Coherencia General**:
-   - ¿El alcance de las funciones es razonable para el nivel jerárquico del puesto?
-   - ¿Las funciones están en el ámbito de competencia del organismo?
+┌─────────────────────────────────────────────────────────────┐
+│ NIVEL 4: NO ALINEADO (Score: 0.0)                         │
+├─────────────────────────────────────────────────────────────┤
+│ Criterio: La función está FUERA del marco del organismo    │
+│                                                             │
+│ Ejemplos:                                                   │
+│   - Función de un ámbito completamente diferente           │
+│   - No aparece en ningún nivel de la estructura            │
+│   - Contradice atribuciones del organismo                  │
+│                                                             │
+│ Campos JSON:                                                │
+│   - nivel: "NIVEL_4_NO_ALINEADO"                           │
+│   - clasificacion: "NOT_ALIGNED"                            │
+│   - score: 0.0                                              │
+│   - distancia_jerarquica: null                             │
+│   - tipo_herencia: "NONE"                                  │
+│   - grupo_encontrado: null                                 │
+└─────────────────────────────────────────────────────────────┘
 
-DECISIÓN FINAL - Clasifica el nivel de alineación:
+═══════════════════════════════════════════════════════════════
+RESPUESTA REQUERIDA - FORMATO JSON:
+═══════════════════════════════════════════════════════════════
 
-SI organismos NO coinciden (detectado en PASO 1-2) → NOT_ALIGNED AUTOMÁTICAMENTE
-
-SI organismos SÍ coinciden:
-- ALIGNED: Funciones están EXPLÍCITAMENTE relacionadas con el ámbito del organismo
-- PARTIALLY_ALIGNED: Funciones son DERIVABLES/RAZONABLES aunque no explícitas en normativa
-- NOT_ALIGNED: Funciones completamente ajenas al ámbito del organismo
-
-RESPONDE EN JSON:
 {{
-  "alignment_level": "ALIGNED" | "PARTIALLY_ALIGNED" | "NOT_ALIGNED",
-  "confidence": 0.0-1.0,
-  "reasoning": "Justificación clara de la evaluación (2-3 oraciones)",
+  "organismo_puesto": {{
+    "nombre": "Nombre completo del organismo del puesto",
+    "siglas": "SIGLAS o null",
+    "confianza": 0.0-1.0,
+    "fuente_identificacion": "De dónde se extrajo (nombre/objetivo/funciones)"
+  }},
+
+  "organismo_normativa": {{
+    "nombre": "Nombre completo del organismo de la normativa",
+    "siglas": "SIGLAS o null",
+    "confianza": 0.0-1.0,
+    "fuente_identificacion": "De dónde se extrajo (título/artículos)"
+  }},
+
+  "instituciones_coinciden": true/false,
+
+  "grupo_jerarquico_puesto": {{
+    "nivel": "Subdirector de Área, Director de Área, etc.",
+    "tipo": "Mando Medio/Alto/Operativo",
+    "confianza": 0.0-1.0
+  }},
+
+  "analisis_funciones": [
+    {{
+      "funcion_id": "F001",
+      "descripcion": "Texto completo de la función",
+
+      "alineacion": {{
+        "nivel": "NIVEL_1_ALINEACION_DIRECTA" | "NIVEL_2_HERENCIA_JEFE_DIRECTO" | "NIVEL_3_HERENCIA_LEJANA" | "NIVEL_4_NO_ALINEADO",
+        "clasificacion": "STRONGLY_ALIGNED" | "ALIGNED" | "PARTIALLY_ALIGNED" | "NOT_ALIGNED",
+        "score": 0.9 | 0.75 | 0.55 | 0.0,
+
+        "evidencia_normativa": {{
+          "grupo_encontrado": "Nombre del grupo jerárquico donde se encontró la atribución",
+          "articulo": "Art. X, fracción Y",
+          "texto": "Fragmento relevante de normativa (máx 200 chars)",
+          "distancia_jerarquica": 0-5,
+          "tipo_herencia": "DIRECTA" | "LEJANA" | "NONE"
+        }},
+
+        "razonamiento": "Explicación clara de por qué se asignó este nivel (2-3 oraciones)"
+      }}
+    }}
+  ],
+
+  "resumen_alineacion": {{
+    "total_funciones": {len(funciones)},
+    "nivel_1_directas": 0,
+    "nivel_2_jefe_directo": 0,
+    "nivel_3_lejanas": 0,
+    "nivel_4_no_alineadas": 0,
+    "score_promedio": 0.0-1.0,
+    "clasificacion_global": "ALIGNED" | "PARTIALLY_ALIGNED" | "NOT_ALIGNED",
+    "confianza": 0.0-1.0
+  }},
+
+  "reasoning": "Resumen ejecutivo de la evaluación completa (3-4 oraciones)",
   "institutional_references_match": true/false,
-  "references_found_in_puesto": ["organismos, documentos encontrados en descripción del puesto"],
-  "references_found_in_normativa": ["organismos, documentos encontrados en normativa proporcionada"],
   "has_hierarchical_backing": true/false,
-  "hierarchical_reasoning": "Explicación de si hay herencia jerárquica válida (solo si PARTIALLY_ALIGNED)",
-  "normativa_mismatches": ["lista de desalineaciones detectadas"],
-  "strengths": ["aspectos bien alineados"],
-  "improvement_areas": ["áreas de mejora"]
+  "normativa_mismatches": []
 }}
+
+IMPORTANTE: Evalúa TODAS las {len(funciones)} funciones individualmente.
 """
 
         try:
