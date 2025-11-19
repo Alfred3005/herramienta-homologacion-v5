@@ -981,7 +981,7 @@ def execute_analysis():
         - Puestos analizados: **{len(resultados)}**
         - Sistema: **v5.34** con Criterio 3 usando LLM (GPT-4o-mini)
         - Modelo LLM: **GPT-4o-mini** (ahorro 94.6% vs GPT-4o)
-        - Criterios aplicados: **3** (Análisis Semántico, Contextual, Impacto Jerárquico con LLM)
+        - Criterios aplicados: **3** (Análisis Semántico, Contextual, Impacto de Grupo Jerárquico con LLM)
         - Validaciones adicionales: Duplicados, Malformadas, Marco Legal, Objetivo
         - Matriz de decisión: **2-of-3**
         """)

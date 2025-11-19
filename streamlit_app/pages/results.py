@@ -136,7 +136,7 @@ def show():
         for criterio_key, criterio_name in [
             ('criterio_1_verbos', 'Verbos Débiles'),
             ('criterio_2_contextual', 'Contextual'),
-            ('criterio_3_impacto', 'Impacto Jerárquico')
+            ('criterio_3_impacto', 'Impacto de Grupo Jerárquico')
         ]:
             pass_count = sum(1 for r in resultados
                            if r.get('validacion', {}).get('criterios', {}).get(criterio_key, {}).get('resultado') == 'PASS')
