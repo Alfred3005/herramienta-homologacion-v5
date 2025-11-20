@@ -113,8 +113,6 @@ class Criterion2Result:
     """
     Resultado de Criterio 2: Validación Contextual
     (Referencias institucionales + herencia jerárquica)
-
-    VERSIÓN 5.41: Incluye análisis detallado función por función con 4 niveles de herencia
     """
     criterion_name: str = "VALIDACION_CONTEXTUAL"
     result: ValidationResult = ValidationResult.PASS
@@ -122,16 +120,13 @@ class Criterion2Result:
     institutional_references_match: bool = True
     has_hierarchical_backing: bool = False
 
-    alignment_classification: str = "ALIGNED"  # ALIGNED, PARTIALLY_ALIGNED, NOT_ALIGNED, STRONGLY_ALIGNED
+    alignment_classification: str = "ALIGNED"  # ALIGNED, PARTIALLY_ALIGNED, NOT_ALIGNED
     alignment_confidence: float = 0.0
 
     flags_detected: List[EvaluationFlag] = field(default_factory=list)
     evidence_found: List[Evidence] = field(default_factory=list)
 
     reasoning: str = ""
-
-    # Análisis detallado v5.41 - Análisis función por función con jerarquía
-    detailed_analysis: Optional[Dict[str, Any]] = None
 
 
 # ==========================================
