@@ -135,7 +135,7 @@ def show():
 
         for criterio_key, criterio_name in [
             ('criterio_1_verbos', 'Verbos Débiles'),
-            ('criterio_2_contextual', 'Contextual (v5.41)'),
+            ('criterio_2_contextual', 'Contextual'),
             ('criterio_3_impacto', 'Impacto de Grupo Jerárquico')
         ]:
             pass_count = sum(1 for r in resultados
@@ -361,24 +361,13 @@ def show():
         with c2:
             c2_data = val.get('criterios', {}).get('criterio_2_contextual', {})
             with st.container():
-                st.markdown("**Criterio 2: Contextual (v5.41)**")
+                st.markdown("**Criterio 2: Contextual**")
                 if c2_data.get('resultado') == 'PASS':
                     st.success("✅ PASS")
                 else:
                     st.error("❌ FAIL")
                 st.metric("Confianza", f"{c2_data.get('alineacion', {}).get('confianza', 0.0):.2f}")
                 st.caption(f"Alineación: {c2_data.get('alineacion', {}).get('clasificacion', 'N/A')}")
-
-                # Mostrar resumen de alineación v5.41 si está disponible
-                if 'resumen_alineacion' in c2_data:
-                    resumen = c2_data['resumen_alineacion']
-                    st.caption(f"📊 Score Promedio: {resumen.get('score_promedio', 0.0):.2f}")
-                    st.caption(
-                        f"🟢 N1: {resumen.get('nivel_1_directas', 0)} | "
-                        f"🔵 N2: {resumen.get('nivel_2_jefe_directo', 0)} | "
-                        f"🟡 N3: {resumen.get('nivel_3_lejanas', 0)} | "
-                        f"🔴 N4: {resumen.get('nivel_4_no_alineadas', 0)}"
-                    )
 
         with c3:
             c3_data = val.get('criterios', {}).get('criterio_3_impacto', {})
@@ -395,66 +384,6 @@ def show():
         with st.expander("📝 Ver Razonamiento Detallado"):
             st.markdown(val.get('razonamiento', 'N/A'))
             st.markdown(f"**Acción Requerida:** {val.get('accion_requerida', 'N/A')}")
-
-        # Análisis función por función (v5.41)
-        c2_data = val.get('criterios', {}).get('criterio_2_contextual', {})
-        if 'analisis_funciones' in c2_data and c2_data['analisis_funciones']:
-            with st.expander("🔍 Ver Análisis Función por Función (v5.41)"):
-                st.markdown("### 📊 Análisis Detallado de Herencia Normativa")
-
-                analisis_funcs = c2_data['analisis_funciones']
-
-                # Mostrar información de organismos si está disponible
-                if 'organismo_puesto' in c2_data:
-                    org_puesto = c2_data['organismo_puesto']
-                    st.info(f"**Organismo del Puesto**: {org_puesto.get('nombre', 'N/A')} ({org_puesto.get('siglas', 'N/A')})")
-
-                if 'grupo_jerarquico_puesto' in c2_data:
-                    grupo = c2_data['grupo_jerarquico_puesto']
-                    st.info(f"**Grupo Jerárquico**: {grupo.get('nivel', 'N/A')} ({grupo.get('tipo', 'N/A')})")
-
-                st.markdown("---")
-
-                # Mostrar cada función
-                for idx, func_analisis in enumerate(analisis_funcs, 1):
-                    alineacion = func_analisis.get('alineacion', {})
-                    nivel = alineacion.get('nivel', 'N/A')
-                    clasificacion = alineacion.get('clasificacion', 'N/A')
-                    score = alineacion.get('score', 0.0)
-
-                    # Icono basado en nivel
-                    icono_nivel = {
-                        'NIVEL_1_ALINEACION_DIRECTA': '🟢',
-                        'NIVEL_2_HERENCIA_JEFE_DIRECTO': '🔵',
-                        'NIVEL_3_HERENCIA_LEJANA': '🟡',
-                        'NIVEL_4_NO_ALINEADO': '🔴'
-                    }.get(nivel, '⚪')
-
-                    # Header de función
-                    st.markdown(f"**{icono_nivel} Función {func_analisis.get('funcion_id', idx)}** - Score: {score}")
-                    st.markdown(f"_{func_analisis.get('descripcion', 'N/A')}_")
-
-                    # Información de evidencia
-                    evidencia = alineacion.get('evidencia_normativa', {})
-                    if evidencia:
-                        cols = st.columns([2, 1, 1])
-                        with cols[0]:
-                            st.caption(f"📖 **Artículo**: {evidencia.get('articulo', 'N/A')}")
-                        with cols[1]:
-                            st.caption(f"👔 **Grupo**: {evidencia.get('grupo_encontrado', 'N/A')}")
-                        with cols[2]:
-                            st.caption(f"📏 **Distancia**: {evidencia.get('distancia_jerarquica', 'N/A')} niveles")
-
-                        if evidencia.get('texto'):
-                            st.caption(f"💬 _{evidencia['texto'][:150]}..._")
-
-                    # Razonamiento
-                    razon = alineacion.get('razonamiento', '')
-                    if razon:
-                        st.caption(f"💭 {razon}")
-
-                    if idx < len(analisis_funcs):
-                        st.markdown("---")
 
 if __name__ == "__main__":
     show()
