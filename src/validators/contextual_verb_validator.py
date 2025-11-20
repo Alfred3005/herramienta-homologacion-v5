@@ -326,204 +326,74 @@ class ContextualVerbValidator:
         # Obtener contexto normativo relevante con búsqueda semántica
         normativa_context = self._get_normativa_context_summary(search_query=search_query)
 
-        prompt = f"""Eres un experto en análisis de descripciones de puestos de la Administración Pública Federal (APF).
+        prompt = f"""Eres experto en análisis de puestos APF. Evalúa cada función usando sistema de 4 niveles de alineación jerárquica (v5.41).
 
-VERSIÓN 5.41 - Sistema Jerárquico de Herencia Normativa
-Tu tarea es evaluar CADA FUNCIÓN individualmente usando un sistema de 4 niveles de alineación jerárquica.
+PUESTO: {puesto_nombre} | NIVEL: {nivel_jerarquico}
+OBJETIVO: {objetivo_general}
 
-═══════════════════════════════════════════════════════════════
-PUESTO A EVALUAR:
-═══════════════════════════════════════════════════════════════
-- NOMBRE: {puesto_nombre}
-- NIVEL JERÁRQUICO: {nivel_jerarquico}
-- OBJETIVO GENERAL: {objetivo_general}
-
-FUNCIONES A EVALUAR ({len(funciones)} total):
+FUNCIONES ({len(funciones)} total):
 {funciones_text}
 
-═══════════════════════════════════════════════════════════════
-NORMATIVA APLICABLE:
-═══════════════════════════════════════════════════════════════
+NORMATIVA:
 {normativa_context}
 
-═══════════════════════════════════════════════════════════════
-INSTRUCCIONES DE EVALUACIÓN - SISTEMA DE 4 NIVELES
-═══════════════════════════════════════════════════════════════
+INSTRUCCIONES:
 
-PASO 1 - IDENTIFICACIÓN INTELIGENTE DE ORGANISMOS:
-─────────────────────────────────────────────────────────────
-A) IDENTIFICAR ORGANISMO DEL PUESTO:
-   - Analiza el NOMBRE del puesto
-   - Analiza OBJETIVO GENERAL y FUNCIONES
-   - Extrae el nombre completo del organismo/dependencia
-   - Extrae siglas si están presentes
-   - Ejemplos: "Secretaría de...", "Comisión Nacional de...", "Instituto de..."
+1. IDENTIFICAR ORGANISMOS (inteligente, sin hardcoding):
+   • Organismo del puesto: Analiza NOMBRE, OBJETIVO, FUNCIONES → extrae nombre completo y siglas
+   • Organismo normativa: Analiza títulos y artículos iniciales → extrae nombre y siglas
+   • Si NO coinciden → clasificación automática: NOT_ALIGNED
 
-B) IDENTIFICAR ORGANISMO DE LA NORMATIVA:
-   - Analiza títulos de documentos normativos
-   - Analiza primeros artículos (objeto, ámbito)
-   - Extrae el nombre completo del organismo
-   - Extrae siglas si están presentes
+2. IDENTIFICAR GRUPO JERÁRQUICO del puesto en normativa:
+   Ejemplos: "Secretario", "Subsecretario", "Director General", "Director de Área", "Subdirector", "Jefe Depto", "Enlace"
 
-C) VALIDACIÓN DE COINCIDENCIA:
-   ✅ SI COINCIDEN → Continuar con análisis de funciones
-   ❌ SI NO COINCIDEN → Resultado automático: NOT_ALIGNED
+3. CLASIFICAR CADA FUNCIÓN en 4 NIVELES:
 
-PASO 2 - IDENTIFICACIÓN DEL GRUPO JERÁRQUICO DEL PUESTO:
-─────────────────────────────────────────────────────────────
-Identifica el GRUPO JERÁRQUICO específico del puesto:
-- Ejemplos: "Secretario", "Subsecretario", "Director General", "Director de Área",
-  "Subdirector de Área", "Jefe de Departamento", "Enlace", etc.
-- Busca en la normativa la sección de atribuciones de este grupo específico
+NIVEL 1 - ALINEACIÓN DIRECTA (score: 0.9, distancia: 0)
+• Función está EXPLÍCITAMENTE en sección del MISMO grupo jerárquico
+• Ejemplo: Subdirector → Art. 25 "Los Subdirectores de Área tendrán..."
+• JSON: nivel="NIVEL_1_ALINEACION_DIRECTA", clasificacion="STRONGLY_ALIGNED", tipo_herencia="DIRECTA"
 
-PASO 3 - ANÁLISIS FUNCIÓN POR FUNCIÓN CON 4 NIVELES:
-─────────────────────────────────────────────────────────────
-Evalúa CADA función individualmente y clasifícala en uno de estos 4 niveles:
+NIVEL 2 - HERENCIA JEFE DIRECTO (score: 0.75, distancia: 1)
+• Función DERIVABLE del jefe inmediato superior (1 nivel arriba)
+• Ejemplo: Función Subdirector "elaborar programas" apoya atribución Director "coordinar"
+• Validar: función subordinada más operativa/técnica vs jefe estratégica/directiva
+• JSON: nivel="NIVEL_2_HERENCIA_JEFE_DIRECTO", clasificacion="ALIGNED", tipo_herencia="DIRECTA"
 
-┌─────────────────────────────────────────────────────────────┐
-│ NIVEL 1: ALINEACIÓN DIRECTA (Score: 0.9)                   │
-├─────────────────────────────────────────────────────────────┤
-│ Criterio: La función está EXPLÍCITAMENTE en la sección     │
-│          del MISMO grupo jerárquico del puesto             │
-│                                                             │
-│ Ejemplo: Puesto "Subdirector de Área"                      │
-│          Normativa: "Artículo 25. Los Subdirectores de     │
-│                     Área tendrán las atribuciones..."      │
-│          Coincidencia: EXACTA en mismo grupo               │
-│                                                             │
-│ Campos JSON:                                                │
-│   - nivel: "NIVEL_1_ALINEACION_DIRECTA"                    │
-│   - clasificacion: "STRONGLY_ALIGNED"                       │
-│   - score: 0.9                                              │
-│   - distancia_jerarquica: 0                                │
-│   - tipo_herencia: "DIRECTA"                               │
-└─────────────────────────────────────────────────────────────┘
+NIVEL 3 - HERENCIA LEJANA (score: 0.55, distancia: 2+)
+• Función en marco general del organismo sin cadena directa (2+ niveles distancia)
+• Ejemplo: Subdirector "proponer indicadores" relacionado con Secretario "establecer políticas" (3 niveles)
+• JSON: nivel="NIVEL_3_HERENCIA_LEJANA", clasificacion="PARTIALLY_ALIGNED", tipo_herencia="LEJANA"
 
-┌─────────────────────────────────────────────────────────────┐
-│ NIVEL 2: HERENCIA DEL JEFE DIRECTO (Score: 0.75)          │
-├─────────────────────────────────────────────────────────────┤
-│ Criterio: La función es DERIVABLE de atribuciones del      │
-│          JEFE INMEDIATO SUPERIOR (un nivel arriba)         │
-│                                                             │
-│ Ejemplo: Puesto "Subdirector de Área"                      │
-│          Normativa: "Artículo 23. Los Directores de Área   │
-│                     tendrán la atribución de coordinar..." │
-│          La función del Subdirector "elaborar programas"   │
-│          es operativa/técnica que APOYA la "coordinación"  │
-│          estratégica del Director (su jefe directo)        │
-│                                                             │
-│ Validación:                                                 │
-│   - Hay relación funcional jefe→subordinado                │
-│   - La función subordinada es más operativa/técnica        │
-│   - La función superior es más estratégica/directiva       │
-│                                                             │
-│ Campos JSON:                                                │
-│   - nivel: "NIVEL_2_HERENCIA_JEFE_DIRECTO"                 │
-│   - clasificacion: "ALIGNED"                                │
-│   - score: 0.75                                             │
-│   - distancia_jerarquica: 1                                │
-│   - tipo_herencia: "DIRECTA"                               │
-│   - grupo_encontrado: "Director de Área" (el jefe)        │
-└─────────────────────────────────────────────────────────────┘
+NIVEL 4 - NO ALINEADO (score: 0.0)
+• Función FUERA del marco del organismo o contradice atribuciones
+• JSON: nivel="NIVEL_4_NO_ALINEADO", clasificacion="NOT_ALIGNED", tipo_herencia="NONE", distancia_jerarquica=null
 
-┌─────────────────────────────────────────────────────────────┐
-│ NIVEL 3: HERENCIA LEJANA EN ORGANISMO (Score: 0.55)       │
-├─────────────────────────────────────────────────────────────┤
-│ Criterio: La función está en el MARCO GENERAL del          │
-│          organismo pero sin cadena directa de herencia     │
-│          (2 o más niveles de distancia)                    │
-│                                                             │
-│ Ejemplo: Puesto "Subdirector de Área"                      │
-│          Normativa: "Artículo 5. El Secretario tiene la    │
-│                     atribución de establecer políticas..." │
-│          La función del Subdirector "proponer indicadores" │
-│          está relacionada con políticas pero hay 3 niveles │
-│          de distancia (Subdirector→Director→Subsecretario  │
-│          →Secretario)                                      │
-│                                                             │
-│ Validación:                                                 │
-│   - Función dentro del ámbito del organismo                │
-│   - NO hay cadena clara jefe→subordinado                   │
-│   - Distancia jerárquica: 2 o más niveles                  │
-│                                                             │
-│ Campos JSON:                                                │
-│   - nivel: "NIVEL_3_HERENCIA_LEJANA"                       │
-│   - clasificacion: "PARTIALLY_ALIGNED"                      │
-│   - score: 0.55                                             │
-│   - distancia_jerarquica: 2 (o más)                       │
-│   - tipo_herencia: "LEJANA"                                │
-│   - grupo_encontrado: "Secretario" (lejano en jerarquía)  │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│ NIVEL 4: NO ALINEADO (Score: 0.0)                         │
-├─────────────────────────────────────────────────────────────┤
-│ Criterio: La función está FUERA del marco del organismo    │
-│                                                             │
-│ Ejemplos:                                                   │
-│   - Función de un ámbito completamente diferente           │
-│   - No aparece en ningún nivel de la estructura            │
-│   - Contradice atribuciones del organismo                  │
-│                                                             │
-│ Campos JSON:                                                │
-│   - nivel: "NIVEL_4_NO_ALINEADO"                           │
-│   - clasificacion: "NOT_ALIGNED"                            │
-│   - score: 0.0                                              │
-│   - distancia_jerarquica: null                             │
-│   - tipo_herencia: "NONE"                                  │
-│   - grupo_encontrado: null                                 │
-└─────────────────────────────────────────────────────────────┘
-
-═══════════════════════════════════════════════════════════════
-RESPUESTA REQUERIDA - FORMATO JSON:
-═══════════════════════════════════════════════════════════════
-
+FORMATO JSON RESPUESTA:
 {{
-  "organismo_puesto": {{
-    "nombre": "Nombre completo del organismo del puesto",
-    "siglas": "SIGLAS o null",
-    "confianza": 0.0-1.0,
-    "fuente_identificacion": "De dónde se extrajo (nombre/objetivo/funciones)"
-  }},
-
-  "organismo_normativa": {{
-    "nombre": "Nombre completo del organismo de la normativa",
-    "siglas": "SIGLAS o null",
-    "confianza": 0.0-1.0,
-    "fuente_identificacion": "De dónde se extrajo (título/artículos)"
-  }},
-
+  "organismo_puesto": {{"nombre": "...", "siglas": "...", "confianza": 0.0-1.0, "fuente_identificacion": "..."}},
+  "organismo_normativa": {{"nombre": "...", "siglas": "...", "confianza": 0.0-1.0, "fuente_identificacion": "..."}},
   "instituciones_coinciden": true/false,
-
-  "grupo_jerarquico_puesto": {{
-    "nivel": "Subdirector de Área, Director de Área, etc.",
-    "tipo": "Mando Medio/Alto/Operativo",
-    "confianza": 0.0-1.0
-  }},
-
+  "grupo_jerarquico_puesto": {{"nivel": "...", "tipo": "Mando Medio/Alto/Operativo", "confianza": 0.0-1.0}},
   "analisis_funciones": [
     {{
       "funcion_id": "F001",
-      "descripcion": "Texto completo de la función",
-
+      "descripcion": "...",
       "alineacion": {{
-        "nivel": "NIVEL_1_ALINEACION_DIRECTA" | "NIVEL_2_HERENCIA_JEFE_DIRECTO" | "NIVEL_3_HERENCIA_LEJANA" | "NIVEL_4_NO_ALINEADO",
-        "clasificacion": "STRONGLY_ALIGNED" | "ALIGNED" | "PARTIALLY_ALIGNED" | "NOT_ALIGNED",
-        "score": 0.9 | 0.75 | 0.55 | 0.0,
-
+        "nivel": "NIVEL_X",
+        "clasificacion": "STRONGLY_ALIGNED|ALIGNED|PARTIALLY_ALIGNED|NOT_ALIGNED",
+        "score": 0.9|0.75|0.55|0.0,
         "evidencia_normativa": {{
-          "grupo_encontrado": "Nombre del grupo jerárquico donde se encontró la atribución",
-          "articulo": "Art. X, fracción Y",
-          "texto": "Fragmento relevante de normativa (máx 200 chars)",
+          "grupo_encontrado": "...",
+          "articulo": "Art. X, frac. Y",
+          "texto": "... (max 200 chars)",
           "distancia_jerarquica": 0-5,
-          "tipo_herencia": "DIRECTA" | "LEJANA" | "NONE"
+          "tipo_herencia": "DIRECTA|LEJANA|NONE"
         }},
-
-        "razonamiento": "Explicación clara de por qué se asignó este nivel (2-3 oraciones)"
+        "razonamiento": "... (2-3 oraciones)"
       }}
     }}
   ],
-
   "resumen_alineacion": {{
     "total_funciones": {len(funciones)},
     "nivel_1_directas": 0,
@@ -531,17 +401,16 @@ RESPUESTA REQUERIDA - FORMATO JSON:
     "nivel_3_lejanas": 0,
     "nivel_4_no_alineadas": 0,
     "score_promedio": 0.0-1.0,
-    "clasificacion_global": "ALIGNED" | "PARTIALLY_ALIGNED" | "NOT_ALIGNED",
+    "clasificacion_global": "ALIGNED|PARTIALLY_ALIGNED|NOT_ALIGNED",
     "confianza": 0.0-1.0
   }},
-
-  "reasoning": "Resumen ejecutivo de la evaluación completa (3-4 oraciones)",
+  "reasoning": "... (3-4 oraciones resumen ejecutivo)",
   "institutional_references_match": true/false,
   "has_hierarchical_backing": true/false,
   "normativa_mismatches": []
 }}
 
-IMPORTANTE: Evalúa TODAS las {len(funciones)} funciones individualmente.
+Evalúa TODAS las {len(funciones)} funciones. Responde SOLO con JSON válido.
 """
 
         try:
