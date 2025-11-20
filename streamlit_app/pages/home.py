@@ -17,6 +17,19 @@ def show():
     st.title("🏛️ Sistema de Homologación APF")
     st.markdown("### Bienvenido al sistema de análisis y validación de puestos")
 
+    # Banner de nueva versión
+    st.info("""
+    🎉 **¡Nueva Versión 5.41 Disponible!** - Sistema Jerárquico de Herencia Normativa
+
+    ✨ **Mejoras principales:**
+    - 🧠 Identificación inteligente de instituciones (sin hardcoding)
+    - 📊 4 niveles de alineación jerárquica con scores granulares (0.9, 0.75, 0.55, 0.0)
+    - 🔍 Análisis función por función con distancia jerárquica
+    - 🎯 Diferenciación entre herencia directa, del jefe directo, y lejana
+
+    Consulta el menú "About" (⋮) para más detalles.
+    """)
+
     st.markdown("---")
 
     # Métricas principales

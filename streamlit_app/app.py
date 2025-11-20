@@ -28,15 +28,31 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://github.com/tu-repo/herramienta-homologacion',
-        'Report a bug': 'https://github.com/tu-repo/herramienta-homologacion/issues',
+        'Get Help': 'https://github.com/Alfred3005/herramienta-homologacion-v5',
+        'Report a bug': 'https://github.com/Alfred3005/herramienta-homologacion-v5/issues',
         'About': """
-        # Sistema de Homologación APF v5.0
+        # Sistema de Homologación APF v5.41
 
         Herramienta para análisis y validación de puestos de la
         Administración Pública Federal contra normativas oficiales.
 
-        **Desarrollado con**: Python 3.12, Streamlit, OpenAI GPT-4
+        ## ✨ Nuevas Características v5.41
+
+        **Sistema Jerárquico de Herencia Normativa:**
+        - Identificación inteligente de instituciones (sin hardcoding)
+        - 4 niveles de alineación jerárquica con scores granulares
+        - Análisis función por función con distancia jerárquica
+        - Diferenciación entre herencia directa, del jefe directo, y lejana
+
+        **Niveles de Alineación:**
+        - 🟢 Nivel 1: Alineación Directa (Score: 0.9)
+        - 🔵 Nivel 2: Herencia del Jefe Directo (Score: 0.75)
+        - 🟡 Nivel 3: Herencia Lejana en Organismo (Score: 0.55)
+        - 🔴 Nivel 4: No Alineado (Score: 0.0)
+
+        **Desarrollado con**: Python 3.12, Streamlit, OpenAI GPT-4o-mini
+
+        **Modelo de IA**: GPT-4o-mini (94.6% más económico que GPT-4o)
         """
     }
 )
@@ -216,9 +232,13 @@ with st.sidebar:
     # Información del sistema
     st.markdown("### ℹ️ Sistema")
     st.markdown(f"""
-    **Versión**: {VERSION}
+    **Versión**: v5.41
     **Estado**: ✅ Operativo
-    **Modelo**: GPT-4o
+    **Modelo**: GPT-4o-mini
+    **Última actualización**: 2025-11-19
+
+    🆕 **Nuevo en v5.41:**
+    Sistema Jerárquico de Herencia Normativa con 4 niveles de alineación
     """)
 
     st.markdown("---")
@@ -235,7 +255,7 @@ with st.sidebar:
 
     # Footer sidebar
     st.caption("🏛️ Sistema de Homologación APF")
-    st.caption(f"v{VERSION} © 2025")
+    st.caption("v5.41 © 2025")
 
 # Cargar página correspondiente
 if st.session_state.page == 'home':
@@ -254,8 +274,8 @@ elif st.session_state.page == 'history':
 # Footer global en todas las páginas (parte inferior)
 st.markdown("---")
 st.markdown(
-    f"<div style='text-align: center; color: #888; font-size: 0.85rem; padding: 1rem 0;'>"
-    f"Sistema de Homologación APF <strong>v{VERSION}</strong> | Powered by OpenAI GPT-4o-mini"
-    f"</div>",
+    "<div style='text-align: center; color: #888; font-size: 0.85rem; padding: 1rem 0;'>"
+    "Sistema de Homologación APF <strong>v5.41</strong> - Sistema Jerárquico de Herencia Normativa | Powered by OpenAI GPT-4o-mini"
+    "</div>",
     unsafe_allow_html=True
 )

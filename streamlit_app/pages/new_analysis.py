@@ -497,9 +497,17 @@ def step_3_analysis_options():
     st.markdown("### 🧠 Análisis Avanzado")
 
     contextual_validation = st.checkbox(
-        "🔍 Ejecutar validación contextual (LLM)",
+        "🔍 Ejecutar validación contextual (LLM) - v5.41",
         value=False,
-        help="Usa GPT-4o para validar funciones contra normativa (más lento pero más preciso)"
+        help="""Validación contextual mejorada con GPT-4o-mini:
+
+        ✨ Nuevo en v5.41:
+        • Identificación inteligente de instituciones
+        • 4 niveles de alineación jerárquica (0.9, 0.75, 0.55, 0.0)
+        • Análisis función por función con distancia jerárquica
+        • Diferenciación entre herencia directa, del jefe directo, y lejana
+
+        Más preciso y transparente que versiones anteriores."""
     )
 
     weak_verbs_analysis = st.checkbox(
