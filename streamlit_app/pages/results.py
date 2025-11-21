@@ -348,9 +348,29 @@ def show():
         st.markdown("---")
         st.markdown("#### 📄 Descargar Reporte RHNet (Control y Auditoría)")
         st.caption("Genera reporte del puesto en formato RH Net para contrastar información de entrada vs resultados del análisis")
+        st.info("ℹ️ **Nota:** El reporte incluye los datos disponibles del análisis. Algunos campos como perfil, escolaridad y competencias pueden no estar disponibles según la fuente de datos original.")
 
         # Preparar datos para el generador
         try:
+            # Extraer funciones desde la validación (ubicación real en el JSON)
+            funciones_extraidas = []
+            c1_data = val.get('criterios', {}).get('criterio_1_verbos', {})
+            detalles = c1_data.get('detalles', {})
+
+            # Agregar funciones de todas las categorías
+            for categoria in ['aprobadas', 'observadas', 'rechazadas']:
+                for func in detalles.get(categoria, []):
+                    funcion_texto = func.get('funcion_text', func.get('descripcion', func.get('descripcion_completa', '')))
+                    if funcion_texto:
+                        funciones_extraidas.append({"descripcion_completa": funcion_texto})
+
+            # Si no hay funciones en detalles, intentar desde el puesto directamente
+            if not funciones_extraidas and puesto.get('funciones'):
+                funciones_extraidas = [
+                    {"descripcion_completa": f.get('descripcion', f.get('descripcion_completa', f.get('texto', '')))}
+                    for f in puesto.get('funciones', [])
+                ]
+
             # Construir estructura de datos compatible con RHNetReportGenerator
             datos_reporte = {
                 "identificacion_puesto": {
@@ -368,12 +388,9 @@ def show():
                     "estatus": puesto.get('estatus', 'N/A')
                 },
                 "objetivo_general": {
-                    "descripcion_completa": puesto.get('objetivo_general', 'No disponible')
+                    "descripcion_completa": puesto.get('objetivo_general', 'No disponible (datos no incluidos en análisis)')
                 },
-                "funciones": [
-                    {"descripcion_completa": f.get('descripcion', f.get('descripcion_completa', f.get('texto', '')))}
-                    for f in puesto.get('funciones', [])
-                ],
+                "funciones": funciones_extraidas if funciones_extraidas else [{"descripcion_completa": "No disponible (datos no incluidos en análisis)"}],
                 "escolaridad": puesto.get('escolaridad', {
                     "nivel_estudios": "NO APLICA",
                     "grado_avance": "NO APLICA",

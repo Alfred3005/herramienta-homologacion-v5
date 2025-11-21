@@ -160,59 +160,70 @@ class PDFExporter(ReportExporterBase):
                 "fpdf2 no está instalado. Instala con: pip install fpdf2"
             )
 
-        # Crear PDF
+        # Crear PDF con márgenes adecuados
         pdf = FPDF()
         pdf.add_page()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.set_margins(left=15, top=15, right=15)
 
         # Header con color
         pdf.set_fill_color(102, 126, 234)  # Color morado
         pdf.set_text_color(255, 255, 255)  # Blanco
-        pdf.set_font('Arial', 'B', 16)
-        pdf.cell(0, 15, 'Reporte de Puesto - Formato RH Net', 0, 1, 'C', True)
+        pdf.set_font('Arial', 'B', 14)
+        pdf.multi_cell(0, 10, 'Reporte de Puesto - Formato RH Net', 0, 'C', True)
 
         # Metadata
         if metadata:
             pdf.set_fill_color(240, 240, 240)  # Gris claro
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font('Arial', '', 10)
+            pdf.set_font('Arial', '', 9)
             codigo = metadata.get('codigo_puesto', 'N/A')
             fecha = metadata.get('fecha_generacion', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-            pdf.cell(0, 8, f'Código: {codigo} | Generado: {fecha}', 0, 1, 'C', True)
+            # Usar multi_cell para evitar problemas de ancho
+            pdf.multi_cell(0, 6, f'Código: {codigo} | Generado: {fecha}', 0, 'C', True)
 
         pdf.ln(5)
 
         # Contenido
         pdf.set_text_color(0, 0, 0)
-        pdf.set_font('Arial', '', 10)
+        pdf.set_font('Arial', '', 9)
 
         # Procesar líneas
         for linea in contenido_reporte.split('\n'):
-            # Detectar títulos (líneas cortas en mayúsculas)
-            if linea.strip() and linea.strip().isupper() and len(linea.strip()) < 50:
-                pdf.set_font('Arial', 'B', 11)
+            if not linea.strip():
                 pdf.ln(2)
-                pdf.cell(0, 6, linea.strip(), 0, 1)
-                pdf.set_font('Arial', '', 10)
-            elif linea.startswith('Función '):
+                continue
+
+            # Limitar longitud de línea para evitar problemas
+            linea_limpia = linea.strip()
+
+            # Detectar títulos (líneas cortas en mayúsculas)
+            if linea_limpia.isupper() and len(linea_limpia) < 50:
                 pdf.set_font('Arial', 'B', 10)
+                pdf.ln(2)
+                pdf.multi_cell(0, 5, linea_limpia, 0, 'L')
+                pdf.set_font('Arial', '', 9)
+            elif linea.startswith('Función '):
+                pdf.set_font('Arial', 'B', 9)
                 pdf.ln(1)
-                pdf.cell(0, 5, linea.strip(), 0, 1)
-                pdf.set_font('Arial', '', 10)
+                pdf.multi_cell(0, 5, linea_limpia, 0, 'L')
+                pdf.set_font('Arial', '', 9)
             else:
-                # Texto normal con manejo de líneas largas
-                if linea.strip():
-                    pdf.multi_cell(0, 5, linea.strip())
-                else:
-                    pdf.ln(2)
+                # Texto normal - siempre usar multi_cell para manejo automático de líneas largas
+                try:
+                    pdf.multi_cell(0, 4.5, linea_limpia, 0, 'L')
+                except Exception as e:
+                    # Si falla, intentar con línea truncada
+                    pdf.multi_cell(0, 4.5, linea_limpia[:180] + '...', 0, 'L')
 
         # Footer
-        pdf.ln(10)
-        pdf.set_font('Arial', 'I', 8)
+        pdf.ln(8)
+        pdf.set_font('Arial', 'I', 7)
         pdf.set_text_color(128, 128, 128)
-        pdf.cell(0, 5, 'Sistema de Homologación APF v5.41 | Generado con Claude Code', 0, 1, 'C')
+        pdf.multi_cell(0, 4, 'Sistema de Homologación APF v5.42 | Generado con Claude Code', 0, 'C')
 
         # Retornar bytes
-        return pdf.output(dest='S').encode('latin-1')
+        return pdf.output()
 
 
 class DOCXExporter(ReportExporterBase):
