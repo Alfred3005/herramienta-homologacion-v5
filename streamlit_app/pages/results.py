@@ -14,6 +14,8 @@ import sys
 # Añadir directorio src al path para importar módulos
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.utils.report_humanizer import humanize_report
+from src.adapters.rhnet_report_generator import RHNetReportGenerator
+from src.adapters.report_exporters import exportar_reporte
 
 def show():
     st.title("📊 Resultados Detallados de Análisis")
@@ -341,6 +343,142 @@ def show():
 
         st.markdown(f"**Confianza Global:** {val.get('confianza', 0.0):.2f}")
         st.markdown(f"**Criterios Aprobados:** {val.get('criterios_aprobados', 0)}/3")
+
+        # SECCIÓN: Descargar Reporte RHNet
+        st.markdown("---")
+        st.markdown("#### 📄 Descargar Reporte RHNet (Control y Auditoría)")
+        st.caption("Genera reporte del puesto en formato RH Net para contrastar información de entrada vs resultados del análisis")
+
+        # Preparar datos para el generador
+        try:
+            # Construir estructura de datos compatible con RHNetReportGenerator
+            datos_reporte = {
+                "identificacion_puesto": {
+                    "codigo_puesto": puesto.get('codigo', 'N/A'),
+                    "denominacion_puesto": puesto.get('denominacion', 'N/A'),
+                    "caracter_ocupacional": puesto.get('caracter_ocupacional', 'N/A'),
+                    "nivel_salarial": {
+                        "codigo": puesto.get('nivel', puesto.get('nivel_salarial', 'N/A')),
+                        "descripcion": ""
+                    },
+                    "persona_en_puesto": puesto.get('persona_en_puesto', 'N/A'),
+                    "puestos_dependientes": puesto.get('puestos_dependientes', 'N/A'),
+                    "unidad_responsable": puesto.get('unidad_responsable', puesto.get('ur', 'N/A')),
+                    "ramo": puesto.get('ramo', 'N/A'),
+                    "estatus": puesto.get('estatus', 'N/A')
+                },
+                "objetivo_general": {
+                    "descripcion_completa": puesto.get('objetivo_general', 'No disponible')
+                },
+                "funciones": [
+                    {"descripcion_completa": f.get('descripcion', f.get('descripcion_completa', f.get('texto', '')))}
+                    for f in puesto.get('funciones', [])
+                ],
+                "escolaridad": puesto.get('escolaridad', {
+                    "nivel_estudios": "NO APLICA",
+                    "grado_avance": "NO APLICA",
+                    "area_general": "NO APLICA",
+                    "carrera_generica": "NO APLICA"
+                }),
+                "experiencia": puesto.get('experiencia', {
+                    "anos_experiencia": "NO APLICA",
+                    "area_general": "NO APLICA",
+                    "area_experiencia": "NO APLICA"
+                }),
+                "condiciones_trabajo": puesto.get('condiciones_trabajo', {
+                    "horario": "Diurno",
+                    "disponibilidad_viajar": "A veces",
+                    "periodos_especiales": "NO",
+                    "cambio_residencia": "NO"
+                }),
+                "entorno_operativo": puesto.get('entorno_operativo', {
+                    "tipo_relacion": "Ambas",
+                    "explicacion": "No disponible",
+                    "caracteristica_informacion": "No disponible"
+                }),
+                "competencias": puesto.get('competencias', []),
+                "observaciones": puesto.get('observaciones', {
+                    "observaciones_generales": "",
+                    "observaciones_especialista": ""
+                })
+            }
+
+            # Generar reporte
+            generador = RHNetReportGenerator()
+            reporte_texto = generador.generar_reporte_completo(datos_reporte)
+
+            # Metadata para exportadores
+            metadata = {
+                "codigo_puesto": puesto.get('codigo', 'N/A'),
+                "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+
+            # Botones de descarga en columnas
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                # TXT
+                txt_bytes = exportar_reporte(reporte_texto, 'txt', metadata)
+                st.download_button(
+                    label="📝 TXT",
+                    data=txt_bytes,
+                    file_name=f"reporte_rhnet_{puesto.get('codigo', 'puesto')}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    help="Descargar como texto plano"
+                )
+
+            with col2:
+                # HTML
+                html_bytes = exportar_reporte(reporte_texto, 'html', metadata)
+                st.download_button(
+                    label="🌐 HTML",
+                    data=html_bytes,
+                    file_name=f"reporte_rhnet_{puesto.get('codigo', 'puesto')}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    help="Descargar como página web"
+                )
+
+            with col3:
+                # PDF
+                try:
+                    pdf_bytes = exportar_reporte(reporte_texto, 'pdf', metadata)
+                    st.download_button(
+                        label="📕 PDF",
+                        data=pdf_bytes,
+                        file_name=f"reporte_rhnet_{puesto.get('codigo', 'puesto')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        help="Descargar como PDF (requiere fpdf2)"
+                    )
+                except ImportError:
+                    st.button("📕 PDF", disabled=True, use_container_width=True, help="Instalar fpdf2: pip install fpdf2")
+
+            with col4:
+                # DOCX
+                try:
+                    docx_bytes = exportar_reporte(reporte_texto, 'docx', metadata)
+                    st.download_button(
+                        label="📘 DOCX",
+                        data=docx_bytes,
+                        file_name=f"reporte_rhnet_{puesto.get('codigo', 'puesto')}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                        help="Descargar como Word (requiere python-docx)"
+                    )
+                except ImportError:
+                    st.button("📘 DOCX", disabled=True, use_container_width=True, help="Instalar python-docx: pip install python-docx")
+
+            # Preview del reporte (opcional)
+            with st.expander("👁️ Vista Previa del Reporte RHNet"):
+                st.text(reporte_texto)
+
+        except Exception as e:
+            st.error(f"⚠️ Error al generar reporte RHNet: {str(e)}")
+            st.caption("Algunos datos pueden no estar disponibles en el análisis")
+
+        st.markdown("---")
 
         # Detalles por criterio
         st.markdown("#### 📊 Detalles por Criterio")

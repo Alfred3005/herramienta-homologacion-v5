@@ -7,6 +7,9 @@ PyPDF2>=3.0.0
 python-dotenv==1.2.1
 litellm>=1.79.0
 
+# Exportadores de reportes
+fpdf2>=2.7.0
+
 # NormativaLoader v4 dependencies
 sentence-transformers>=2.2.0
 numpy>=1.24.0
