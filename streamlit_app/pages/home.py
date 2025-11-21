@@ -17,6 +17,17 @@ def show():
     st.title("🏛️ Sistema de Homologación APF")
     st.markdown("### Bienvenido al sistema de análisis y validación de puestos")
 
+    # Banner v5.42
+    st.info("""
+    🎉 **Nueva versión v5.42** - Sistema de Reportes RH Net Multi-Formato
+
+    Ahora puedes descargar reportes de puestos en formato RH Net oficial en 4 formatos diferentes:
+    📝 TXT | 🌐 HTML | 📕 PDF | 📘 DOCX
+
+    Ideal para control, auditoría y contrastar información de entrada vs análisis.
+    Disponible en la página de **Resultados** → Sección de puesto individual.
+    """)
+
     st.markdown("---")
 
     # Métricas principales

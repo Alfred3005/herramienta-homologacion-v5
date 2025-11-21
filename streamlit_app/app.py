@@ -31,12 +31,29 @@ st.set_page_config(
         'Get Help': 'https://github.com/tu-repo/herramienta-homologacion',
         'Report a bug': 'https://github.com/tu-repo/herramienta-homologacion/issues',
         'About': """
-        # Sistema de Homologación APF v5.0
+        # Sistema de Homologación APF v5.42
 
         Herramienta para análisis y validación de puestos de la
         Administración Pública Federal contra normativas oficiales.
 
-        **Desarrollado con**: Python 3.12, Streamlit, OpenAI GPT-4
+        ## ✨ Nuevas Características v5.42
+
+        **Sistema de Reportes RH Net Multi-Formato:**
+        - Generación de reportes en formato RH Net oficial
+        - Descarga en 4 formatos: TXT, HTML, PDF, DOCX
+        - Control y auditoría de información de entrada
+        - Contraste fácil: entrada vs resultados de análisis
+        - Vista previa antes de descargar
+
+        **Características v5.40 (incluidas):**
+        - Validación de 3 criterios (Verbos, Contextual, Impacto)
+        - Análisis semántico con embeddings
+        - Sistema de matriz 2-of-3 para decisiones
+        - Generación de reportes humanizados
+
+        **Desarrollado con**: Python 3.12, Streamlit, OpenAI GPT-4o-mini
+
+        **Modelo de IA**: GPT-4o-mini (94.6% más económico que GPT-4o)
         """
     }
 )
@@ -216,9 +233,13 @@ with st.sidebar:
     # Información del sistema
     st.markdown("### ℹ️ Sistema")
     st.markdown(f"""
-    **Versión**: {VERSION}
+    **Versión**: v5.42
     **Estado**: ✅ Operativo
-    **Modelo**: GPT-4o
+    **Modelo**: GPT-4o-mini
+    **Última actualización**: 2025-11-20
+
+    🆕 **Nuevo en v5.42:**
+    Sistema de Reportes RH Net Multi-Formato (TXT/HTML/PDF/DOCX)
     """)
 
     st.markdown("---")
